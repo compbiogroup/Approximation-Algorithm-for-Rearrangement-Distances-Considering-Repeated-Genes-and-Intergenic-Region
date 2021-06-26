@@ -1,0 +1,5 @@
+.stack-work
+build
+MCISP2K.cabal
+*~
+dist/dist

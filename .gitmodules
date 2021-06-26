@@ -1,0 +1,4 @@
+[submodule "distance/quickcheck"]
+	path = distance/quickcheck
+	url = http://software.legiasoft.com/git/quickcheck.git
+	branch = master

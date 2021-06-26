@@ -1,0 +1,13 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "MCISP2K:lib"
+
+    - path: "./app/MCISP2K.hs"
+      component: "MCISP2K:exe:MCISP2K"
+
+    - path: "./app/DB.hs"
+      component: "MCISP2K:exe:DB"
+
+    - path: "./test"
+      component: "MCISP2K:test:MCISP2K-test"
