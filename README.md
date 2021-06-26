@@ -1,6 +1,6 @@
 # Approximation for Minimum Common Intergenic String Partition
 
-An $2k$ approximation algorithm for the Minimum Common Intergenic String Partition and Reverse Minimum Common Intergenic String Partition, where $k$ in the maximum number of copies of a given character in the strings.
+An 2k approximation algorithm for the Minimum Common Intergenic String Partition and Reverse Minimum Common Intergenic String Partition, where k in the maximum number of copies of a given character in the strings.
 
 ## Usage
 
