@@ -4,4 +4,4 @@ A 3 asymptotic approximation algorithm for Sorting by Intergenic Transposition. 
 
 ## Usage
 
-Compile the code by running `make` and see the running options with `./dist --help`.  To use other algorithm besides the transposition approximation include a executable in the external folder and pass its name as the algorithm. In that case the executable should receive one instance via the standard input and produce the distance in the standard output.
+Compile the code by running `make` and see the running options with `./dist --help`.  To use other algorithm besides the transposition approximation include a executable in the `external` folder and pass its name as the algorithm. In that case the executable should receive one instance via the standard input and produce the distance in the standard output.
