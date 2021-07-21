@@ -12,61 +12,62 @@
 -- Maintainer  : gabriel.gabrielhs@gmail.com
 --
 -- A genome comprises of a gene list and a integer list (correspondent to the sizes of intergenic regions).
-module Genomes where
-
--- ( Duo,
---   Gene,
---   Genome (genomeIsSigned),
---   IR (..),
---   Idx (..),
---   Sign (..),
---   allSubGenomes,
---   balanced,
---   breakGenome,
---   combineGenomes,
---   combineGenomesL,
---   duoByIdx,
---   irByIdx,
---   duosList,
---   duoIdx,
---   duoIr,
---   duoToBS,
---   estimateITD,
---   fromLists,
---   genePair,
---   genomeSize,
---   intToGene,
---   interleaveListRepresentation,
---   interleaveListToGenome,
---   maybeEstimateITD,
---   occurenceMax,
---   randomGenome,
---   rearrangeGenome,
---   readGenome,
---   writeGenome,
---   sliceGenome,
---   reversal,
---   transposition,
---   subGenCount,
---   subGenome,
---   toLists,
---   validBegin,
---   validEnd,
---   -- weigth,
---   subGenomeFind,
---   GenomeMap,
---   gmEmpty,
---   gmEmptyRev,
---   gmLookup,
---   gmInsert,
---   gmLookupInsert,
--- )
+module Genomes
+  ( Duo,
+    Gene,
+    Genome (genomeIsSigned),
+    IR (..),
+    Idx (..),
+    Sign (..),
+    allSubGenomes,
+    balanced,
+    breakGenome,
+    combineGenomes,
+    combineGenomesL,
+    duoByIdx,
+    irByIdx,
+    duosList,
+    duoIdx,
+    duoIr,
+    duoToBS,
+    estimateITD,
+    fromLists,
+    genePair,
+    genomeSize,
+    intToGene,
+    interleaveListRepresentation,
+    interleaveListToGenome,
+    maybeEstimateITD,
+    occurenceMax,
+    randomGenome,
+    rearrangeGenome,
+    readGenome,
+    writeGenome,
+    sliceGenome,
+    reversal,
+    transposition,
+    subGenCount,
+    subGenome,
+    toLists,
+    validBeginIR,
+    validEndIR,
+    -- weigth,
+    subGenomeFind,
+    GenomeMap,
+    gmEmpty,
+    gmEmptyRev,
+    gmLookup,
+    gmInsert,
+    gmLookupInsert,
+  )
+where
 
 import Control.Exception (assert)
 import Control.Monad.Random (MonadRandom, getRandomRs, getRandoms)
 import Data.ByteString.Builder (intDec, toLazyByteString)
-import Data.ByteString.Lazy (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy as LBS
+import Data.Char (isNumber)
 import Data.Coerce (coerce)
 import Data.Foldable (foldl', toList)
 import Data.Hashable (Hashable)
@@ -193,7 +194,7 @@ rearrangeGenome g = do
 --      Conversions     --
 --------------------------
 
-readGenome :: Bool -> Sign -> ByteString -> ByteString -> Genome
+readGenome :: Bool -> Sign -> BS.ByteString -> BS.ByteString -> Genome
 readGenome extend sign s i =
   fromLists
     extend
@@ -203,15 +204,15 @@ readGenome extend sign s i =
   where
     readInt = coerce . fst . fromJust . BS.readInt
 
-writeGenome :: Bool -> Genome -> (ByteString, ByteString)
+writeGenome :: Bool -> Genome -> (BS.ByteString, BS.ByteString)
 writeGenome rext g =
-  ( BS.unwords . fmap (toLazyByteString . intDec . coerce) $ ls,
-    BS.unwords . fmap (toLazyByteString . intDec . coerce) $ li
+  ( BS.unwords . fmap (LBS.toStrict . toLazyByteString . intDec . coerce) $ ls,
+    BS.unwords . fmap (LBS.toStrict . toLazyByteString . intDec . coerce) $ li
   )
   where
     (_, ls, li) = toLists rext g
 
-duoToBS :: Duo -> [ByteString]
+duoToBS :: Duo -> [BS.ByteString]
 duoToBS Duo {..} =
   let (al, ar) = genePair
    in [geneToBS al, irToBS duoIr, geneToBS ar]
@@ -219,11 +220,11 @@ duoToBS Duo {..} =
 intToGene :: Int -> Gene
 intToGene = coerce
 
-geneToBS :: Gene -> ByteString
-geneToBS = toLazyByteString . (<>) "g" . intDec . coerce
+geneToBS :: Gene -> BS.ByteString
+geneToBS = LBS.toStrict . toLazyByteString . (<>) "g" . intDec . coerce
 
-irToBS :: IR -> ByteString
-irToBS = toLazyByteString . (<>) "i" . intDec . coerce
+irToBS :: IR -> BS.ByteString
+irToBS = LBS.toStrict . toLazyByteString . (<>) "i" . intDec . coerce
 
 fromLists :: Bool -> Sign -> [Gene] -> [IR] -> Genome
 fromLists extend sign ls_ li = Genome (Vec.fromList ls) (Vec.fromList li) sign
@@ -242,21 +243,36 @@ duosList g = foldr toDuo [] . zip [1 ..] . lPairs . Vec.toList $ gstring g
     irs = irList g
     toDuo (i, (al, ar)) l = Duo (al, ar) (irs ! (i -1)) (Idx i) (genomeSize g) (genomeIsSigned g) : l
 
-interleaveListRepresentation :: Genome -> ([ByteString], Sign)
+interleaveListRepresentation :: Genome -> ([BS.ByteString], Sign)
 interleaveListRepresentation g = (interleavelists ls li, genomeIsSigned g)
   where
     ls = toList . fmap geneToBS $ gstring g
     li = toList . fmap irToBS $ irList g
 
-interleaveListToGenome :: [ByteString] -> Sign -> Genome
+interleaveListToGenome :: [BS.ByteString] -> Sign -> Genome
 interleaveListToGenome l = Genome (Vec.fromList g_g) (Vec.fromList g_ir)
   where
     (g_g, g_ir) = foldr go ([], []) l
     go l (g, ir)
       | BS.head l == BS.head "g" = ((readG . BS.tail $ l) : g, ir)
       | BS.head l == BS.head "i" = (g, (readG . BS.tail $ l) : ir)
-    readG :: (Num a) => ByteString -> a
+      | otherwise = error patternError
+    readG :: (Num a) => BS.ByteString -> a
     readG = fromIntegral . fst . fromJust . BS.readInt
+
+---------------------------------------------------
+--      Manipulate Interleave Representation     --
+---------------------------------------------------
+
+-- valid paths of a suffix tree must start with a gene
+-- must end in a gene
+validBeginIR :: BS.ByteString -> Bool
+validBeginIR bs = BS.head bs == BS.head "g"
+
+-- valid ByteStrings correspondent to nodes of a suffix tree
+-- must end in a gene
+validEndIR :: BS.ByteString -> Bool
+validEndIR bs = BS.head bs == BS.head "g"
 
 ------------------------------------------
 --           Operations                 --
@@ -363,20 +379,6 @@ occurence g a = sum . fmap (\x -> if x == a then 1 else 0) . gstring $ g
 
 occurenceMax :: Genome -> Int
 occurenceMax g = maximum . fmap (g `occurence`) . gstring $ g
-
-------------------------------------------
---           Predicates                 --
-------------------------------------------
-
--- valid paths of a suffix tree must start with a gene
--- must end in a gene
-validBegin :: ByteString -> Bool
-validBegin bs = BS.head bs == BS.head "g"
-
--- valid ByteStrings correspondent to nodes of a suffix tree
--- must end in a gene
-validEnd :: ByteString -> Bool
-validEnd bs = BS.head bs == BS.head "g"
 
 balanced :: Genome -> Genome -> Bool
 balanced g h = balancedGenes && balancedIR

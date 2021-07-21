@@ -6,8 +6,8 @@ module DB where
 
 import Control.Monad (replicateM, (>=>))
 import Control.Monad.Random (Rand, StdGen, evalRandIO, getRandomR, getRandoms)
-import Data.ByteString.Lazy (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BS
 import Data.Coerce (coerce)
 import Data.List (unfoldr)
 import Genomes

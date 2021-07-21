@@ -18,7 +18,7 @@
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
 resolver:
-  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/17/9.yaml
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/18/2.yaml
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -37,6 +37,7 @@ packages:
 #
 extra-deps:
 - suffixtree-0.2.2.1@sha256:cebcb1310034a6a4d5f9febececb1a8c28fe411376c6fca0faf1b4b0cdf4c176,1095
+- parallel-io-0.3.5@sha256:97db32eb84b3141f4957f6d208c0ef8adce647cbf68099417e93c7d9a45f9b35,3482
 
 #
 # extra-deps: []

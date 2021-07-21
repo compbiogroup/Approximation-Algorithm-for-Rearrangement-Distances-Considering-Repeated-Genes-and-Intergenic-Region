@@ -11,7 +11,7 @@ module MCISP2K where
 
 import Control.Concurrent.ParallelIO.Global (parallel, stopGlobalPool)
 import Control.DeepSeq (force)
-import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.ByteString.Char8 as BS
 import Data.Time
 import Genomes (Genome, Sign(..), readGenome, writeGenome)
 import LocalBase

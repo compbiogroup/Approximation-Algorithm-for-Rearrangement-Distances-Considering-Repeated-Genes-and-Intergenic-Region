@@ -20,7 +20,7 @@ extra-source-files:
 # description:         Please see the README on GitHub at <https://github.com/gabriel-siqueira/MCISP2K#readme>
 
 dependencies:
-- base >= 4.14 && < 5
+- base
 - MonadRandom
 - bytestring
 - containers
@@ -33,7 +33,6 @@ dependencies:
 - process
 - random
 - random-shuffle
-- suffixtree
 - text
 - time
 - transformers
@@ -51,7 +50,7 @@ executables:
     - -main-is MCISP2K
     - -threaded
     - -rtsopts
-    - -with-rtsopts=-N
+    - -with-rtsopts=-N1
     - -O2
     # - -fno-ignore-asserts
     dependencies:
