@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiWayIf #-}
@@ -62,6 +64,7 @@ module Genomes
   )
 where
 
+import Control.DeepSeq (NFData)
 import Control.Exception (assert)
 import Control.Monad.Random (MonadRandom, getRandomRs, getRandoms)
 import Data.ByteString.Builder (intDec, toLazyByteString)
@@ -80,6 +83,7 @@ import qualified Data.Text as Text
 import Data.Vector (Vector, (!))
 import qualified Data.Vector as Vec
 import qualified Data.Vector.Mutable as MVec
+import GHC.Generics (Generic)
 import LocalBase
 import System.Random (Random)
 import System.Random.Shuffle (shuffleM)
@@ -94,7 +98,7 @@ type Gstring = Vector Gene
 
 type IRList = Vector IR
 
-data Sign = Signed | Unsigned deriving (Eq, Show)
+data Sign = Signed | Unsigned deriving (Eq, Show, NFData, Generic)
 
 -- | Representation of a genome the gstring must be a non empty sequence of genes and
 --  size of irList must be size of gstring minus one

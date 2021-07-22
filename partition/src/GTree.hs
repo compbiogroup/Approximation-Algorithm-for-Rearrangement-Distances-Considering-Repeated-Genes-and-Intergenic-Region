@@ -1,0 +1,542 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE DeriveGeneric #-}
+
+-- |
+-- Module      : GTree
+-- Description : Representation and construction of a sub-genome tree
+-- Copyright   : (c) Gabriel Siqueira, 2021
+-- License     : BSD3
+-- Maintainer  : gabriel.gabrielhs@gmail.com
+--
+-- This module implements a suffix tree based structure to represent common sub-genomes of a pair of genomes.
+module GTree
+  ( Tmin,
+    GenomePosition (..),
+    PartitionType (..),
+    makeTmin,
+    getGenome,
+    updateTmin,
+  )
+where
+
+import Control.Arrow (second)
+import Control.DeepSeq (NFData)
+import Control.Exception (assert)
+import Data.ByteString (ByteString)
+import Data.Coerce (coerce)
+import Data.Foldable (toList)
+import qualified Data.List as List
+import qualified Data.Map as Map
+import Data.Maybe
+  ( catMaybes,
+    fromJust,
+    fromMaybe,
+    listToMaybe,
+    mapMaybe,
+  )
+import Data.Tree (Forest, Tree)
+import qualified Data.Tree as Tree
+import Data.Vector (Vector, (!))
+import qualified Data.Vector as Vec
+import GHC.Generics (Generic)
+import Genomes as G
+import LocalBase
+
+-- | Indication of diferent partition types
+data PartitionType = MCISP | RMCISP deriving (Show, Read, Enum, Bounded, Eq, NFData, Generic)
+
+-- | Position of a subgenome X in the indicated genome Y (G or H). The first value (Idx) is the index of X in Y. The second value (Size) is the size of Y minus the size of X. The third value (Ori) indicate whether X and Y are inverted.
+data GenomePosition = G !Idx !Size !Ori | H !Idx !Size !Ori deriving (Show, Eq)
+
+instance Orientable GenomePosition where
+  getOri (G _ _ LR) = LR
+  getOri (G _ _ RL) = RL
+  getOri (H _ _ LR) = LR
+  getOri (H _ _ RL) = RL
+
+  invOri (G idx remSize LR) = G (coerce remSize - idx + 2) remSize RL
+  invOri (G idx remSize RL) = G (coerce remSize - idx + 2) remSize LR
+  invOri (H idx remSize LR) = H (coerce remSize - idx + 2) remSize RL
+  invOri (H idx remSize RL) = H (coerce remSize - idx + 2) remSize LR
+
+-- | Tmin is the minimal set of set T, where
+--  T is the set of genomes with different
+--  weights in g or h
+data Tmin = Tmin !PartitionType !Sign HSSTree deriving (Show, Eq, NFData, Generic)
+
+-- | SuffixTree from the Hitting Set Algorithm, we use it to construct the set Tmin.
+--  Leafs correspondent to suffixes started in G are marked with G and Leafs correspondent
+--  to suffixes started in H are marked with H.
+--  Each node has SumG with the number of leafs of the subtree marked as G and
+--  SumH with the number of leafs of the subtree marked as H.
+--  Size with the genome size
+--  does not contain the characters marking the end of strings.
+data HSSTree = HSRoot
+  { rSize :: !Size,
+    rChildren :: [HSSubTree]
+  }
+  deriving (Eq, NFData, Generic)
+
+type HSSubTree = Tree HSLabel
+
+instance Show HSSTree where
+  show HSRoot {..} =
+    "Genome Size:"
+      ++ show rSize
+      ++ "\n"
+      ++ Tree.drawForest (map (fmap show) rChildren)
+
+type SumG = Int
+
+type SumH = Int
+
+data HSLabel = HSLabel
+  { hsInfo :: !Info,
+    hsPref :: !IdxPair
+  }
+  deriving (Eq, NFData, Generic)
+
+data IsInG = InG | InH deriving (Eq, Show, NFData, Generic)
+
+-- A leaf is available if it is proper (the correspondent infix is not empty)
+-- and its first intergenic region is not a breakpoint or after a breakpoint
+-- the lastBreakDistance is the number of characters after the last breakpoint
+-- of the correspondent suffix
+data Info
+  = LeafInfo
+      { lastBreakDistance :: !Int,
+        isInG :: !IsInG,
+        isRev :: !Ori,
+        available :: !Bool
+      }
+  | NodeInfo
+      { sumG :: !SumG,
+        sumH :: !SumH
+      }
+  deriving (Eq, NFData, Generic)
+
+instance Show HSLabel where
+  show HSLabel {..} =
+    "Prefix:" ++ show hsPref
+      ++ ( case hsInfo of
+             LeafInfo {..} ->
+               (if isInG == InG then " - G" else " - H")
+                 ++ ", up:"
+                 ++ show lastBreakDistance
+                 ++ (if isRev == LR then "" else " R")
+                 ++ (if available then "" else " X")
+             NodeInfo {..} -> " - sumG: " ++ show sumG ++ ", sumH:" ++ show sumH
+         )
+
+data STree
+  = Node [(IdxPair, STree)]
+  | Leaf
+  deriving (Show)
+
+makeTmin :: PartitionType -> Genome -> Genome -> Tmin
+makeTmin ptype g h = Tmin ptype (genomeIsSigned g) $ makeHSSTree sTree
+  where
+    n = genomeSize g
+    (l1, _) = interleaveListRepresentation g
+    (l2, _) = interleaveListRepresentation h
+    (rl1, _) = interleaveListRepresentation (invOri g)
+    (rl2, _) = interleaveListRepresentation (invOri h)
+    str = Vec.fromList $ case ptype of
+      MCISP -> l1 ++ ("$" : l2) ++ ["#"]
+      RMCISP -> l1 ++ ("$" : l2) ++ ("#" : rl1) ++ ("%" : rl2) ++ ["&"]
+    -- Markers for end of strings
+    markers = case ptype of
+      MCISP -> ["$", "#"]
+      RMCISP -> ["$", "#", "%", "&"]
+    getG t = case hsInfo . Tree.rootLabel $ t of
+      LeafInfo {..} -> if isInG == InG then 1 else 0
+      NodeInfo {..} -> sumG
+    getH t = case hsInfo . Tree.rootLabel $ t of
+      LeafInfo {..} -> if isInG == InH then 1 else 0
+      NodeInfo {..} -> sumH
+
+    -- Construct the Suffix Tree
+    sTree = go [0 .. length str - 1]
+      where
+        go :: [Int] -> STree
+        go [] = Leaf
+        go ss =
+          Node
+            [ (IdxPair str (begin_idx -1) end_idx, go ssr)
+              | (_, sufs) <- suffixMap ss,
+                (begin_idx, end_idx, ssr) <- [findEdge sufs]
+            ]
+
+        -- input is a list of suffixes and output the begin and end of the edge infix
+        -- (first element and last element + 1) and a list of the subtree suffixes.
+        findEdge :: [Int] -> (Int, Int, [Int])
+        findEdge [] = error patternError
+        findEdge [s] = (s, length str, [])
+        findEdge sss@(a_idx : ss)
+          | null [c_idx | c_idx <- ss, str ! a_idx /= str ! c_idx] =
+            let (_, end_idx, ss') =
+                  findEdge ((a_idx + 1) : [c_idx + 1 | c_idx <- filter (/= length str - 1) ss])
+             in (a_idx, end_idx, ss')
+          | otherwise = (a_idx, a_idx, sss)
+
+        suffixMap :: [Int] -> [(ByteString, [Int])]
+        suffixMap = map (second reverse) . Map.toList . List.foldl' step Map.empty
+          where
+            step m suf_idx = Map.alter (f (suf_idx + 1)) (str ! suf_idx) m
+            f i Nothing = Just [i]
+            f i (Just is) = Just (i : is)
+
+    -- Convert the suffix tree to HSSTree
+    makeHSSTree Leaf = error patternError
+    makeHSSTree (Node edges) =
+      HSRoot n ((\ts -> assert (fmap getG ts == fmap getH ts) ts) subTrees)
+      where
+        subTrees = concat $ mapMaybe makeSubHSSTree edges
+        makeSubHSSTree e@(idxPair, t) =
+          if
+              | not $ validBeginIR (getHead idxPair) -> Nothing
+              | ipSize idxPair == 1 -> Just $ go False e
+              | otherwise ->
+                Just $
+                  go False (getHeadPair idxPair, Node [(dropHead idxPair, t)])
+
+    go withHead (idxPair_, st) =
+      case st of
+        Leaf ->
+          pure $
+            flip Tree.Node [] $
+              if
+                  | "$" `elem` p__ ->
+                    let p = Vec.takeWhile (/= "$") p__
+                     in HSLabel
+                          (LeafInfo 0 InG LR (getHead idxPair__ /= "$"))
+                          (ipTakePrefix idxPair__ (length p))
+                  | "#" `elem` p__ ->
+                    let p = Vec.takeWhile (/= "#") p__
+                     in HSLabel
+                          (LeafInfo 0 InH LR (getHead idxPair__ /= "#"))
+                          (ipTakePrefix idxPair__ (length p))
+                  | "%" `elem` p__ ->
+                    let p = Vec.takeWhile (/= "%") p__
+                     in HSLabel
+                          (LeafInfo 0 InG RL (getHead idxPair__ /= "%"))
+                          (ipTakePrefix idxPair__ (length p))
+                  | "&" `elem` p__ ->
+                    let p = Vec.takeWhile (/= "&") p__
+                     in HSLabel
+                          (LeafInfo 0 InH RL (getHead idxPair__ /= "&"))
+                          (ipTakePrefix idxPair__ (length p))
+                  | otherwise -> error patternError
+        (Node edges) ->
+          if size == 0
+            then subTrees
+            else [Tree.Node (HSLabel (NodeInfo sG sH) idxPair) subTrees]
+          where
+            size = ipSize idxPair
+            sG = sum . map getG $ subTrees
+            sH = sum . map getH $ subTrees
+            subTrees = concatMap makeSubHSSTree edges
+            makeSubHSSTree = go withHead'
+            (withHead', idxPair) =
+              ( \h ->
+                  if validEndIR h
+                    then (False, idxPair__)
+                    else (True, dropLast idxPair__)
+              )
+                $ getLast idxPair__
+      where
+        p__ = ipSlice idxPair__
+        idxPair__ = if withHead then addHead idxPair_ else idxPair_
+
+class WalkDownInfo w where
+  goDown :: w -> HSSubTree -> [(w, HSSubTree)]
+
+-- information stored while walking on the tree
+data SearchDownInfo = SearchDown
+  { subStr :: [IdxPair], -- node's substring
+    accPref :: [IdxPair] -- accummulated prefix
+  }
+
+idxsToVector :: [IdxPair] -> Vector ByteString
+idxsToVector = Vec.concat . map ipSlice . reverse
+
+makeSearchDownInfo :: HSSubTree -> SearchDownInfo
+makeSearchDownInfo t@(Tree.Node HSLabel {..} children) =
+  if ipSize hsPref >= 2
+    then SearchDown [ipTakePrefix hsPref 2] [hsPref]
+    else SearchDown [ipTakePrefix hsPref 1] [hsPref]
+
+instance WalkDownInfo SearchDownInfo where
+  goDown SearchDown {..} currentNode =
+    let (Tree.Node HSLabel {..} children) = currentNode
+     in case hsInfo of
+          LeafInfo {..} -> []
+          NodeInfo {..} -> fmap aux children
+    where
+      aux t@(Tree.Node HSLabel {..} children) =
+        (,t) $
+          SearchDown
+            (ipTakePrefix hsPref 2 : accPref)
+            (hsPref : accPref)
+
+data UpdateInfo = Update
+  { currentStr :: IdxPair, -- remaining of selected suffix
+    breakDistance :: Idx, -- number of characters until the breakpoint is reached
+    updateDistance :: Idx, -- number of characters until update starts
+    leafInG :: IsInG -- whether the suffix's leaf is in G
+  }
+  deriving (Show)
+
+makeUpdateInfo :: IdxPair -> Idx -> UpdateInfo
+makeUpdateInfo idxPair bDist = Update idxPair bDist 0 InG
+
+instance WalkDownInfo (Maybe UpdateInfo) where
+  goDown Nothing _ = []
+  goDown (Just up@Update {..}) currentNode =
+    case hsInfo of
+      LeafInfo {..} -> []
+      NodeInfo {..} -> map aux children
+    where
+      (Tree.Node HSLabel {..} children) = currentNode
+      aux :: HSSubTree -> (Maybe UpdateInfo, HSSubTree)
+      aux t@(Tree.Node HSLabel {..} children) =
+        if hsPref `ipIsPrefixOf` currentStr
+          then (Just $ up {currentStr = ipDropPrefix currentStr (coerce . ipSize $ hsPref)}, t)
+          else (Nothing, t)
+
+breakNode :: HSSubTree -> Idx -> IsInG -> HSSubTree
+breakNode (Tree.Node HSLabel {..} children) idx inG =
+  case hsInfo of
+    LeafInfo {..} ->
+      Tree.Node
+        ( HSLabel
+            ( if
+                  | not available -> NodeInfo 0 0
+                  | isInG == InG -> NodeInfo 1 0
+                  | otherwise -> NodeInfo 0 1
+            )
+            pl
+        )
+        [Tree.Node (HSLabel hsInfo {available = False} pr) children]
+    NodeInfo {..} ->
+      Tree.Node
+        (HSLabel (NodeInfo sumG sumH) pl)
+        [ Tree.Node
+            ( if inG == InG
+                then HSLabel (NodeInfo (sumG - 1) sumH) pr
+                else HSLabel (NodeInfo sumG (sumH - 1)) pr
+            )
+            children
+        ]
+  where
+    (pl, pr) = ipSplitAt hsPref (coerce idx - 1)
+
+updateNode :: UpdateInfo -> HSSubTree -> (UpdateInfo, HSSubTree)
+updateNode up@Update {..} t@(Tree.Node hsl@HSLabel {..} children) =
+  if breakDistance <= 0
+    then (up, t)
+    else
+      (info',) $
+        if updateDistance <= 0 && breakDistance' <= -2
+          then breakNode node' (- breakDistance') leafInG
+          else node'
+  where
+    breakDistance' = breakDistance - (coerce . ipSize $ hsPref)
+    (info', node') =
+      case hsInfo of
+        LeafInfo {..} ->
+          let lastBreakDistance' = max (coerce breakDistance) lastBreakDistance
+           in ( up
+                  { updateDistance = coerce lastBreakDistance - (coerce . ipSize $ hsPref),
+                    breakDistance = breakDistance',
+                    leafInG = isInG
+                  },
+                Tree.Node
+                  ( hsl
+                      { hsInfo =
+                          hsInfo
+                            { lastBreakDistance = lastBreakDistance',
+                              available = available && breakDistance' <= -2
+                            }
+                      }
+                  )
+                  children
+              )
+        NodeInfo {..} ->
+          if updateDistance <= 0 && breakDistance' > -2
+            then
+              if leafInG == InG
+                then
+                  ( up {breakDistance = breakDistance'},
+                    Tree.Node (hsl {hsInfo = hsInfo {sumG = sumG - 1}}) children
+                  )
+                else
+                  ( up {breakDistance = breakDistance'},
+                    Tree.Node (hsl {hsInfo = hsInfo {sumH = sumH - 1}}) children
+                  )
+            else
+              ( up {updateDistance = updateDistance - (coerce . ipSize $ hsPref), breakDistance = breakDistance'},
+                t
+              )
+
+-- | Recover a sub-genome of some block also returns
+--  a genome position of one of its occurrences
+getGenome :: Tmin -> Maybe (Genome, GenomePosition)
+getGenome (Tmin ptype sign HSRoot {..}) =
+  fmap toGenome . safeMinimum
+    . mapMaybe (\t -> walkDown (makeSearchDownInfo t) t)
+    $ rChildren
+  where
+    toGenome :: ([IdxPair], Size, Size, IsInG, Ori) -> (Genome, GenomePosition)
+    -- Size is the size of the suffix after the sub-genome occurrence
+    -- and the boolean indicate whether the occurrence is in A
+    toGenome (idxPairs, _, suf_size, inG, ori) =
+      (g,) $
+        if inG == InG
+          then G idx (rSize - genomeSize g) LR
+          else H idx (rSize - genomeSize g) LR
+      where
+        g_ = interleaveListToGenome (toList $ idxsToVector idxPairs) sign
+        (idx, g) = case ori of
+          LR -> (coerce $ rSize - suf_size `div` 2 - genomeSize g + 1, g_)
+          RL -> (coerce $ suf_size `div` 2 + 1, invOri g_)
+
+    -- Find minimum element of T'.
+    -- Note: a first node is never chosen,
+    -- because it can not have a breakpoint (so is never unbalanced)
+    walkDown :: SearchDownInfo -> HSSubTree -> Maybe ([IdxPair], Size, Size, IsInG, Ori)
+    walkDown gd@SearchDown {..} currentNode =
+      let (Tree.Node HSLabel {..} children) = currentNode
+       in case hsInfo of
+            LeafInfo {..} ->
+              if available
+                then Just (subStr, sum . map ipSize $ subStr, ipSize hsPref - 2, isInG, isRev)
+                else Nothing
+            NodeInfo {..} ->
+              if sumG /= sumH
+                then
+                  let inG = if sumG > sumH then InG else InH
+                   in (\(ori, sp) -> (subStr, sum . map ipSize $ subStr, sp, inG, ori))
+                        . second (subtract 2)
+                        <$> sum_pfx inG 0 currentNode
+                else safeMinimum . mapMaybe (uncurry walkDown) $ goDown gd currentNode
+    sum_pfx :: IsInG -> Size -> HSSubTree -> Maybe (Ori, Size)
+    sum_pfx inG acc (Tree.Node HSLabel {..} children) =
+      case hsInfo of
+        LeafInfo {..} ->
+          let acc' = acc + ipSize hsPref
+           in if inG == isInG && lastBreakDistance < coerce acc' - 1
+                then Just (isRev, acc')
+                else Nothing
+        NodeInfo {..} -> listToMaybe $ mapMaybe (sum_pfx inG (ipSize hsPref + acc)) children
+    safeMinimum [] = Nothing
+    safeMinimum l = Just $ List.minimumBy (\(_, a, _, _, _) (_, b, _, _, _) -> a `compare` b) l
+
+updateTmin :: Genome -> Genome -> GenomePosition -> Tmin -> Duo -> Tmin
+updateTmin g h gp tmin duo = foldl aux tmin suffixesAndIndexes
+  where
+    (suffixesAndIndexes, inG, ori) = case gp of
+      (G gidx _ ori) -> (select gidx g, InG, ori)
+      (H gidx _ ori) -> (select gidx h, InH, ori)
+    n = genomeSize g
+    select gidx x =
+      zip (repeat i) . map (\i -> IdxPair v i (Vec.length v)) . take (coerce prefSize) . evens $ [0 ..]
+      where
+        prefSize = gidx + duoIdx duo - 1
+        i = 2 * (coerce n - prefSize) - 1
+        v = Vec.fromList . fst . interleaveListRepresentation $ x
+
+    -- search the suffix in each subtree of root
+    -- Note: a first node never have a breakpoint
+    aux :: Tmin -> (Idx, IdxPair) -> Tmin
+    aux (Tmin ptype sign root@HSRoot {..}) (i, s) =
+      Tmin ptype sign $ root {rChildren = map aux2 rChildren}
+      where
+        aux2 t@(Tree.Node l@HSLabel {..} children) =
+          if hsPref `ipIsPrefixOf` s
+            then snd . go (makeUpdateInfo (ipDropPrefix s (coerce $ ipSize hsPref)) i) $ t
+            else t
+
+    -- return the updated node
+    go :: UpdateInfo -> HSSubTree -> (Maybe UpdateInfo, HSSubTree)
+    go info0@Update {..} t@(Tree.Node l@HSLabel {..} children) =
+      case goDown (Just info0) t of
+        [] -> case hsInfo of
+          LeafInfo {..} ->
+            let (info', t'@(Tree.Node l' _)) = updateNode info0 t
+             in if inG == isInG && ipSize currentStr == 0 && ori == isRev
+                  then (Just info', t')
+                  else (Nothing, t)
+          NodeInfo {..} -> (Nothing, t)
+        infosTrees ->
+          let (infos_, children') =
+                unzip $
+                  map
+                    ( \(mInfo, t) ->
+                        case mInfo of
+                          Nothing -> (Nothing, t)
+                          Just info -> go info t
+                    )
+                    infosTrees
+              infos = catMaybes infos_
+              info' = head infos
+              (info'', t') = updateNode info' (Tree.Node l children')
+           in if null infos
+                then (Nothing, t)
+                else assert (length infos == 1) (Just info'', t')
+
+data IdxPair = IdxPair (Vector ByteString) !Int !Int deriving (NFData, Generic)
+
+instance Show IdxPair where
+  show idxPair = show $ ipSlice idxPair
+
+instance Eq IdxPair where
+  (IdxPair _ lidx1 ridx1) == (IdxPair _ lidx2 ridx2) = lidx1 == lidx1 && ridx2 == ridx2
+
+addHead :: IdxPair -> IdxPair
+addHead (IdxPair v lidx ridx) = IdxPair v (lidx - 1) ridx
+
+getHead :: IdxPair -> ByteString
+getHead (IdxPair v lidx _) = v ! lidx
+
+getLast :: IdxPair -> ByteString
+getLast (IdxPair v _ ridx) = v ! (ridx - 1)
+
+dropHead :: IdxPair -> IdxPair
+dropHead (IdxPair v lidx ridx) = IdxPair v (lidx + 1) ridx
+
+dropLast :: IdxPair -> IdxPair
+dropLast (IdxPair v lidx ridx) = IdxPair v lidx (ridx - 1)
+
+getHeadPair :: IdxPair -> IdxPair
+getHeadPair (IdxPair v lidx ridx) = IdxPair v lidx (lidx + 1)
+
+ipSize :: IdxPair -> Size
+ipSize (IdxPair v lidx ridx) = Size (ridx - lidx)
+
+ipSlice :: IdxPair -> Vector ByteString
+ipSlice (IdxPair v lidx ridx) = Vec.slice lidx (ridx - lidx) v
+
+ipTakePrefix :: IdxPair -> Int -> IdxPair
+ipTakePrefix (IdxPair v lidx ridx) prf = IdxPair v lidx (lidx + prf)
+
+ipDropPrefix :: IdxPair -> Int -> IdxPair
+ipDropPrefix (IdxPair v lidx ridx) prf = IdxPair v (lidx + prf) ridx
+
+ipCombine :: IdxPair -> IdxPair -> IdxPair
+ipCombine (IdxPair v lidx1 ridx1) (IdxPair _ lidx2 ridx2) =
+  assert (ridx1 == lidx2) (IdxPair v lidx1 ridx2)
+
+ipIsPrefixOf :: IdxPair -> IdxPair -> Bool
+ipIsPrefixOf idxPair1 idxPair2 = Vec.length v1 <= Vec.length v2 && v1 == Vec.unsafeTake (Vec.length v1) v2
+  where
+    v1 = ipSlice idxPair1
+    v2 = ipSlice idxPair2
+
+ipSplitAt :: IdxPair -> Int -> (IdxPair, IdxPair)
+ipSplitAt idxPair i = (ipTakePrefix idxPair i, ipDropPrefix idxPair i)

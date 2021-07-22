@@ -81,8 +81,7 @@ prop_lowerBound =
     h <- forAll (rearrangeGenome g)
     pt <- forAll genPartitionType
     let part = getPartition pt g h
-        tmin = makeTmin pt g h
-    assert $ coerce (sizeTmin g h tmin) <= 2 * cost part
+    assert $ coerce (sizeTmin pt g h) <= 2 * cost part
 
 prop_upperBound :: Property
 prop_upperBound =
@@ -91,9 +90,8 @@ prop_upperBound =
     h <- forAll (rearrangeGenome g)
     pt <- forAll genPartitionType
     let part = getPartition pt g h
-        tmin = makeTmin pt g h
         k = occurenceMax g
-    assert $ 2 * k * coerce (sizeTmin g h tmin) >= 2 * cost part
+    assert $ 2 * k * coerce (sizeTmin pt g h) >= 2 * cost part
 
 tests :: IO Bool
 tests = checkSequential $$(discover)

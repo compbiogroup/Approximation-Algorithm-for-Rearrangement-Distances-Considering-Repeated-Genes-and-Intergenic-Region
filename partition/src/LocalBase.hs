@@ -1,23 +1,29 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module LocalBase where
 
+import Control.DeepSeq (NFData)
 import qualified Data.HashSet as HashSet
 import Data.Hashable (Hashable)
 import qualified Data.List as List
 import Debug.Trace (trace)
+import GHC.Generics (Generic)
 
-newtype Size = Size Int deriving newtype (Eq, Show, Read, Num, Integral, Real, Ord, Enum)
+newtype Size = Size Int deriving newtype (Eq, Show, Read, Num, Integral, Real, Ord, Enum, NFData)
 
 newtype Dist = Dist Int deriving newtype (Eq, Show, Read)
 
-data Ori = LR | RL deriving (Eq, Show)
+data Ori = LR | RL deriving (Eq, Show, NFData, Generic)
 
 class Orientable o where
   -- ^ Get orientation
+
   getOri :: o -> Ori
   -- ^ Invert orientation
+
   invOri :: o -> o
 
 canonicOri :: (Orientable o) => o -> o
