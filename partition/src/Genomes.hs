@@ -42,6 +42,7 @@ module Genomes
     maybeEstimateITD,
     occurenceMax,
     randomGenome,
+    randomGenomeWithReplicas,
     rearrangeGenome,
     readGenome,
     writeGenome,
@@ -98,7 +99,7 @@ type Gstring = Vector Gene
 
 type IRList = Vector IR
 
-data Sign = Signed | Unsigned deriving (Eq, Show, NFData, Generic)
+data Sign = Signed | Unsigned deriving (Eq, Show, NFData, Generic, Enum)
 
 -- | Representation of a genome the gstring must be a non empty sequence of genes and
 --  size of irList must be size of gstring minus one
@@ -161,38 +162,79 @@ instance Show Genome where
 instance Orientable Genome where
   getOri g =
     if
-        | gstring g < rg -> LR
-        | gstring g > rg -> RL
-        | otherwise -> if irList g <= (Vec.reverse . irList $ g) then LR else RL
+        | gstring g < gstring rg ->
+          case genomeIsSigned g of
+            Signed -> RL
+            Unsigned -> LR
+        | gstring g > gstring rg ->
+          case genomeIsSigned g of
+            Signed -> LR
+            Unsigned -> RL
+        | otherwise -> if irList g <= irList rg then LR else RL
     where
-      rg = Vec.reverse . gstring $ g
-  invOri g = Genome (Vec.reverse . gstring $ g) (Vec.reverse . irList $ g) (genomeIsSigned g)
+      rg = invOri g
+  invOri g = Genome rs (Vec.reverse . irList $ g) (genomeIsSigned g)
+    where
+      rs =
+        ( case genomeIsSigned g of
+            Signed -> fmap invOri
+            Unsigned -> id
+        )
+          . Vec.reverse
+          . gstring
+          $ g
 
 --------------------------------
 --      Random Generation     --
 --------------------------------
 
-randomGenome :: MonadRandom mon => Size -> Int -> mon Genome
-randomGenome size lim = do
-  -- coins <- getRandoms
-  -- ls <- zipWith swaps coins . take n . map fromIntegral <$> getRandomRs (1, lim)
-  ls <- take n <$> getRandomRs (1, coerce lim)
+randomGenome :: MonadRandom mon => Size -> Int -> Sign -> mon Genome
+randomGenome size lim signed = do
+  coins <- getRandoms
+  ls <- case signed of
+    Unsigned -> take n <$> getRandomRs (1, coerce lim)
+    Signed -> zipWith swaps coins . take n <$> getRandomRs (1, coerce lim)
   li <- take (n + 1) <$> getRandomRs (1, 100)
-  return $ fromLists True Unsigned ls li
+  return $ fromLists True signed ls li
   where
     n = fromIntegral size
+    swaps b v = if b then v else invOri v
 
--- swaps b v = if b then v else invOri v
+randomGenomeWithReplicas :: MonadRandom mon => Size -> Int -> Int -> Int -> Sign -> mon Genome
+randomGenomeWithReplicas size rep low high signed = do
+  coins <- getRandoms
+  occs <- getRandomRs (fromIntegral low, fromIntegral high)
+  let ls =
+        ( case signed of
+            Unsigned -> id
+            Signed -> zipWith swaps coins
+        )
+          . (\l -> l ++ coerce [length l + 1 .. n])
+          . concat
+          . zipWith replicate occs
+          . coerce
+          $ [1 .. rep]
+  li <- take (n + 1) <$> getRandomRs (1, 100)
+  return $ fromLists True signed ls li
+  where
+    n = fromIntegral size
+    swaps b v = if b then v else invOri v
 
 rearrangeGenome :: MonadRandom mon => Genome -> mon Genome
 rearrangeGenome g = do
+  coins <- getRandoms
   let (sign, ls, li) = toLists True g
       s = sum li
   ls' <- shuffleM ls
+  ls' <- case sign of
+    Unsigned -> shuffleM ls
+    Signed -> zipWith swaps coins <$> shuffleM ls
   x <-
     List.sort . map IR . take (coerce $ genomeSize g) <$> getRandomRs (0, coerce s)
   let li' = zipWith (-) (x ++ [s]) (0 : x)
   return $ fromLists True sign ls' li'
+  where
+    swaps b v = if b then v else invOri v
 
 --------------------------
 --      Conversions     --
@@ -233,9 +275,10 @@ irToBS = LBS.toStrict . toLazyByteString . (<>) "i" . intDec . coerce
 fromLists :: Bool -> Sign -> [Gene] -> [IR] -> Genome
 fromLists extend sign ls_ li = Genome (Vec.fromList ls) (Vec.fromList li) sign
   where
+    ls__ = case sign of Signed -> map canonicOri ls_; Unsigned -> ls_
     ls =
       if extend
-        then 0 : (ls_ ++ [if null ls_ then 1 else maximum ls_ + 1])
+        then 0 : (ls_ ++ [if null ls_ then 1 else maximum ls__ + 1])
         else ls_
 
 toLists :: Bool -> Genome -> (Sign, [Gene], [IR])
@@ -400,7 +443,7 @@ genomeSize = Size . Vec.length . gstring
 ------------------------------------------
 
 subGenome :: Genome -> Genome -> Bool
-subGenome x g = or $ subGenomeFind x g
+subGenome x g = genomeIsSigned x == genomeIsSigned g && or (subGenomeFind x g)
 
 -- | For each gene of a genome g, return if an occurence of
 --  a nonempty genome x starts in that gene

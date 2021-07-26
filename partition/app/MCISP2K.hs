@@ -22,6 +22,7 @@ data Args = Args
   { input :: String,
     output :: String,
     noParallel :: Bool,
+    signed :: Sign,
     partType :: PartitionType
   }
 
@@ -43,6 +44,11 @@ argsParser =
       <*> switch
         ( long "no-par"
             <> help "Do not process the genomes in parallel."
+        )
+      <*> flag Unsigned Signed 
+        ( long "signed"
+            <> short 's'
+            <> help "Whether the input Strings are signed."
         )
       <*> flag MCISP RMCISP
         ( long "rev"
@@ -74,7 +80,7 @@ main = do
   where
     runOne args bstrs = do
       start <- getCurrentTime
-      let !bstrs' = force $ simplifyGenomes (partType args) bstrs
+      let !bstrs' = force $ simplifyGenomes (partType args) (signed args) bstrs
       end <- getCurrentTime
       let time = BS.pack . show . realToFrac $ diffUTCTime end start
       return (bstrs', "# Time: " <> (BS.pack . show $ time))
@@ -86,12 +92,12 @@ main = do
     fromAns (((s1, i1, s2, i2), time) : ss) = s1 : i1 : s2 : i2 : time : fromAns ss
     fromAns [] = []
 
-simplifyGenomes :: PartitionType -> (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString) -> (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString)
-simplifyGenomes ptype (s1, i1, s2, i2) = (s1', i1', s2', i2')
+simplifyGenomes :: PartitionType -> Sign -> (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString) -> (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString)
+simplifyGenomes ptype signed (s1, i1, s2, i2) = (s1', i1', s2', i2')
   where
     (s1', i1') = writeGenome False g'
     (s2', i2') = writeGenome False h'
     (g', h') = reduced part
     part = getPartition ptype g h
-    g = readGenome True Unsigned s1 i1
-    h = readGenome True Unsigned s2 i2
+    g = readGenome True signed s1 i1
+    h = readGenome True signed s2 i2

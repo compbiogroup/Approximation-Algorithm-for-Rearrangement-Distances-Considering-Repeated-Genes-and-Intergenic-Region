@@ -38,7 +38,7 @@ data Args = Args
     db_size :: Size,
     db_nop :: Int,
     db_porc :: Int,
-    -- db_sign :: Bool,
+    db_sign :: Sign,
     db_output :: String
   }
 
@@ -95,47 +95,49 @@ argParser =
                 (progDesc "DB with random generation.")
             )
       )
-    <*> option
-      auto
-      ( long "number_genomes"
-          <> short 'k'
-          <> metavar "K"
-          <> help "Number genome pairs to generate."
-      )
-    <*> option
-      auto
-      ( long "size_genome"
-          <> short 'n'
-          <> metavar "N"
-          <> help "Size of the genomes."
-      )
-    <*> option
-      auto
-      ( long "number_op"
-          <> short 'r'
-          <> metavar "R"
-          <> help "Number of operations to apply (-1 to use a random list)."
-      )
-    <*> option
-      auto
-      ( long "porcentage_rev"
-          <> short 'p'
-          <> metavar "P"
-          <> showDefault
-          <> value 100
-          <> help "Porcentage of reversions in the operations."
-      )
-    -- <*> switch
-    --   ( long "sign"
-    --       <> short 's'
-    --       <> help "Consider the Genomes sign."
-    --   )
-    <*> strOption
-      ( long "outfile"
-          <> short 'o'
-          <> metavar "oFILE"
-          <> help "Output file"
-      )
+      <*> option
+        auto
+        ( long "number_genomes"
+            <> short 'k'
+            <> metavar "K"
+            <> help "Number genome pairs to generate."
+        )
+      <*> option
+        auto
+        ( long "size_genome"
+            <> short 'n'
+            <> metavar "N"
+            <> help "Size of the genomes."
+        )
+      <*> option
+        auto
+        ( long "number_op"
+            <> short 'r'
+            <> metavar "R"
+            <> help "Number of operations to apply (-1 to use a random list)."
+        )
+      <*> option
+        auto
+        ( long "porcentage_rev"
+            <> short 'p'
+            <> metavar "P"
+            <> showDefault
+            <> value 100
+            <> help "Porcentage of reversions in the operations."
+        )
+      <*> flag
+        Unsigned
+        Signed
+        ( long "signed"
+            <> short 's'
+            <> help "Whether the input Strings are signed."
+        )
+      <*> strOption
+        ( long "outfile"
+            <> short 'o'
+            <> metavar "oFILE"
+            <> help "Output file"
+        )
 
 main :: IO ()
 main = do
@@ -149,8 +151,8 @@ main = do
 genPair :: Args -> Rand StdGen (ByteString, ByteString, ByteString, ByteString)
 genPair Args {..} = do
   g <- case db_par of
-    (DB1 (RepDB l h d)) -> undefined
-    (DB2 (RandDB lim)) -> randomGenome db_size lim
+    (DB1 (RepDB l h d)) -> randomGenomeWithReplicas db_size d l h db_sign
+    (DB2 (RandDB lim)) -> randomGenome db_size lim db_sign
   h <-
     if db_nop == -1
       then rearrangeGenome g
