@@ -32,7 +32,6 @@ module Partition
   )
 where
 
-import Control.DeepSeq (force)
 import Control.Arrow (second)
 import Control.Exception (assert)
 import Data.ByteString (ByteString)
@@ -109,7 +108,7 @@ addBreakpoint part duo gp =
 getPartition :: PartitionType -> Genome -> Genome -> Partition
 getPartition ptype g h = go (makePartialPartition ptype g h) tmin0 breaks0
   where
-    tmin0 = force $ makeTmin ptype g h
+    tmin0 = makeTmin ptype g h
     breaks0 = Breaks ptype HashSet.empty
     go :: Partition -> Tmin -> Breaks -> Partition
     go part tmin breaks =
@@ -120,8 +119,8 @@ getPartition ptype g h = go (makePartialPartition ptype g h) tmin0 breaks0
           RMCISP -> assert (tmin'' /= tmin) $ go part' tmin'' breaks'
           where
             (break, breaks') = getBreak breaks x
-            tmin' = force $ updateTmin g h gp tmin break
-            tmin'' = force $ updateTmin (invOri g) (invOri h) (invOri gp) tmin' (invOri break)
+            tmin' = updateTmin g h gp tmin break
+            tmin'' = updateTmin (invOri g) (invOri h) (invOri gp) tmin' (invOri break)
             part' = addBreakpoint part break gp
 
 -- | A partition (s,p) is valid if

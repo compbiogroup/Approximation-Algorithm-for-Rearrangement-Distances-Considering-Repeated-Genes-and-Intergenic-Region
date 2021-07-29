@@ -137,7 +137,7 @@ prop_interleaveListIso :: Property
 prop_interleaveListIso =
   property $ do
     g <- forAll genGenome
-    g === (uncurry interleaveListToGenome . interleaveListRepresentation $ g)
+    g === (flip interleaveListToGenome (genomeIsSigned g) . interleaveListRepresentation $ g)
 
 tests :: IO Bool
 tests = checkSequential $$(discover)

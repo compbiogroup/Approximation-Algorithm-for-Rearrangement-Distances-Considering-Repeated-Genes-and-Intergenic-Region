@@ -142,13 +142,13 @@ makeTmin :: PartitionType -> Genome -> Genome -> Tmin
 makeTmin ptype g h = Tmin ptype (genomeIsSigned g) $ makeHSSTree sTree
   where
     n = genomeSize g
-    (l1, _) = interleaveListRepresentation g
-    (l2, _) = interleaveListRepresentation h
-    (rl1, _) = interleaveListRepresentation (invOri g)
-    (rl2, _) = interleaveListRepresentation (invOri h)
-    str = Vec.fromList $ case ptype of
-      MCISP -> l1 ++ ("$" : l2) ++ ["#"]
-      RMCISP -> l1 ++ ("$" : l2) ++ ("#" : rl1) ++ ("%" : rl2) ++ ["&"]
+    l1 = interleaveListRepresentation g
+    l2 = interleaveListRepresentation h
+    rl1 = interleaveListRepresentation (invOri g)
+    rl2= interleaveListRepresentation (invOri h)
+    str = case ptype of
+      MCISP -> Vec.concat [l1, Vec.singleton "$", l2, Vec.singleton "#"]
+      RMCISP -> Vec.concat [l1, Vec.singleton "$", l2, Vec.singleton "#", rl1, Vec.singleton "%", rl2, Vec.singleton "&"]
     -- Markers for end of strings
     markers = case ptype of
       MCISP -> ["$", "#"]
@@ -401,7 +401,7 @@ getGenome (Tmin ptype sign HSRoot {..}) =
           then G idx (rSize - genomeSize g) LR
           else H idx (rSize - genomeSize g) LR
       where
-        g_ = interleaveListToGenome (toList $ idxsToVector idxPairs) sign
+        g_ = interleaveListToGenome (idxsToVector idxPairs) sign
         (idx, g) = case ori of
           LR -> (coerce $ rSize - suf_size `div` 2 - genomeSize g + 1, g_)
           RL -> (coerce $ suf_size `div` 2 + 1, invOri g_)
@@ -449,7 +449,7 @@ updateTmin g h gp tmin duo = foldl aux tmin suffixesAndIndexes
       where
         prefSize = gidx + duoIdx duo - 1
         i = 2 * (coerce n - prefSize) - 1
-        v = Vec.fromList . fst . interleaveListRepresentation $ x
+        v = interleaveListRepresentation x
 
     -- search the suffix in each subtree of root
     -- Note: a first node never have a breakpoint

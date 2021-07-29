@@ -106,6 +106,7 @@ data Sign = Signed | Unsigned deriving (Eq, Show, NFData, Generic, Enum)
 data Genome = Genome
   { gstring :: Gstring,
     irList :: IRList,
+    interleaveListRepresentation :: Vector BS.ByteString,
     genomeIsSigned :: Sign
   }
   deriving (Eq)
@@ -173,8 +174,12 @@ instance Orientable Genome where
         | otherwise -> if irList g <= irList rg then LR else RL
     where
       rg = invOri g
-  invOri g = Genome rs (Vec.reverse . irList $ g) (genomeIsSigned g)
+  invOri g = Genome rs ri ilr (genomeIsSigned g)
     where
+      ilr = Vec.fromList $ interleavelists ls_bs li_bs
+      ls_bs = fmap geneToBS . toList $ rs
+      li_bs = fmap irToBS . toList $ ri
+      ri = Vec.reverse . irList $ g
       rs =
         ( case genomeIsSigned g of
             Signed -> fmap invOri
@@ -273,8 +278,12 @@ irToBS :: IR -> BS.ByteString
 irToBS = LBS.toStrict . toLazyByteString . (<>) "i" . intDec . coerce
 
 fromLists :: Bool -> Sign -> [Gene] -> [IR] -> Genome
-fromLists extend sign ls_ li = Genome (Vec.fromList ls) (Vec.fromList li) sign
+fromLists extend sign ls_ li = Genome (Vec.fromList ls) (Vec.fromList li) ilr sign
   where
+    ilr = Vec.fromList $ interleavelists ls_bs li_bs
+    ls_bs = fmap geneToBS ls
+    li_bs = fmap irToBS li
+
     ls__ = case sign of Signed -> map canonicOri ls_; Unsigned -> ls_
     ls =
       if extend
@@ -290,14 +299,8 @@ duosList g = foldr toDuo [] . zip [1 ..] . lPairs . Vec.toList $ gstring g
     irs = irList g
     toDuo (i, (al, ar)) l = Duo (al, ar) (irs ! (i -1)) (Idx i) (genomeSize g) (genomeIsSigned g) : l
 
-interleaveListRepresentation :: Genome -> ([BS.ByteString], Sign)
-interleaveListRepresentation g = (interleavelists ls li, genomeIsSigned g)
-  where
-    ls = toList . fmap geneToBS $ gstring g
-    li = toList . fmap irToBS $ irList g
-
-interleaveListToGenome :: [BS.ByteString] -> Sign -> Genome
-interleaveListToGenome l = Genome (Vec.fromList g_g) (Vec.fromList g_ir)
+interleaveListToGenome :: Vector BS.ByteString -> Sign -> Genome
+interleaveListToGenome l = Genome (Vec.fromList g_g) (Vec.fromList g_ir) l
   where
     (g_g, g_ir) = foldr go ([], []) l
     go l (g, ir)
@@ -334,8 +337,11 @@ transposition i j k x y z g =
     . assert (0 <= x && x <= (vi ! (coerce i - 2)))
     . assert (0 <= y && y <= (vi ! (coerce j - 2)))
     . assert (0 <= z && z <= (vi ! (coerce k - 2)))
-    $ Genome vs' vi' (genomeIsSigned g)
+    $ Genome vs' vi' ilr (genomeIsSigned g)
   where
+    ilr = Vec.fromList $ interleavelists ls_bs li_bs
+    ls_bs = fmap geneToBS . toList $ vs'
+    li_bs = fmap irToBS . toList $ vi'
     vs' = Vec.modify updateG vs
     vi' = Vec.modify updateIR vi
 
@@ -369,8 +375,11 @@ reversal i j x y g =
     . assert (j <= coerce (genomeSize g) - 1)
     . assert (0 <= x && x <= (vi ! (coerce i - 2)))
     . assert (0 <= y && y <= (vi ! (coerce j - 1)))
-    $ Genome vs' vi' (genomeIsSigned g)
+    $ Genome vs' vi' ilr (genomeIsSigned g)
   where
+    ilr = Vec.fromList $ interleavelists ls_bs li_bs
+    ls_bs = fmap geneToBS . toList $ vs'
+    li_bs = fmap irToBS . toList $ vi'
     vs' = Vec.modify updateG vs
     vi' = Vec.modify updateIR vi
 
@@ -406,7 +415,7 @@ duoByIdx g idx = Duo (a1, a2) ir idx (genomeSize g) (genomeIsSigned g)
     ir = vi ! (i -1)
 
 combineGenomes :: IR -> Genome -> Genome -> Genome
-combineGenomes ir g h = Genome (gstring g <> gstring h) (irList g <> Vec.cons ir (irList h)) (genomeIsSigned g <> genomeIsSigned h)
+combineGenomes ir g h = Genome (gstring g <> gstring h) (irList g <> Vec.cons ir (irList h)) (Vec.concat [interleaveListRepresentation g, Vec.singleton (irToBS ir), interleaveListRepresentation h]) (genomeIsSigned g <> genomeIsSigned h)
 
 combineGenomesL :: [IR] -> [Genome] -> Genome
 combineGenomesL irs gs =
@@ -416,8 +425,9 @@ breakGenome :: Genome -> Idx -> (IR, Genome, Genome)
 breakGenome g idx = (irList g ! (coerce idx - 1), sliceGenome g 1 idx, sliceGenome g (idx + 1) (coerce $ genomeSize g))
 
 sliceGenome :: Genome -> Idx -> Idx -> Genome
-sliceGenome g i j = Genome vs' vi' (genomeIsSigned g)
+sliceGenome g i j = Genome vs' vi' ilr' (genomeIsSigned g)
   where
+    ilr' = Vec.slice (coerce $ 2 * (i -1)) (coerce $ 2 * (j - i) + 1) $ interleaveListRepresentation g
     vs' = Vec.slice (coerce $ i - 1) (coerce $ j - i + 1) $ gstring g
     vi' = Vec.slice (coerce $ i - 1) (coerce $ j - i) $ irList g
 
@@ -468,7 +478,7 @@ allSubGenomes g = go 0 1 []
       | i > n = acc
       | i + k > n = go (i + 1) 1 acc
       | otherwise =
-        let g' = Genome (Vec.slice i k vs) (Vec.slice i (k -1) vi) (genomeIsSigned g)
+        let g' = Genome (Vec.slice i k vs) (Vec.slice i (k -1) vi) (Vec.slice (2 * i) (2 * k - 1) $ interleaveListRepresentation g) (genomeIsSigned g)
          in go i (k + 1) (g' : acc)
 
 maybeEstimateITD :: Genome -> Genome -> Maybe Dist
