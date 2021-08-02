@@ -65,7 +65,6 @@ module Genomes
   )
 where
 
-import Control.DeepSeq (NFData)
 import Control.Exception (assert)
 import Control.Monad.Random (MonadRandom, getRandomRs, getRandoms)
 import Data.ByteString.Builder (intDec, toLazyByteString)
@@ -99,7 +98,7 @@ type Gstring = Vector Gene
 
 type IRList = Vector IR
 
-data Sign = Signed | Unsigned deriving (Eq, Show, NFData, Generic, Enum)
+data Sign = Signed | Unsigned deriving (Eq, Show, Enum)
 
 -- | Representation of a genome the gstring must be a non empty sequence of genes and
 --  size of irList must be size of gstring minus one

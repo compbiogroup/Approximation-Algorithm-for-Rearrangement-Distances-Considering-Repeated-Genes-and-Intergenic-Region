@@ -46,6 +46,7 @@ executables:
   MCISP2K:
     main:                MCISP2K.hs
     source-dirs:         app
+    other-modules: []
     ghc-options:
     - -main-is MCISP2K
     - -threaded
@@ -59,6 +60,7 @@ executables:
   DB:
     main:                DB.hs
     source-dirs:         app
+    other-modules: []
     ghc-options:
     - -main-is DB
     - -threaded
