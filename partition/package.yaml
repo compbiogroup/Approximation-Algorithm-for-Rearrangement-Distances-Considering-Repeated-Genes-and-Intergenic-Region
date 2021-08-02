@@ -51,7 +51,7 @@ executables:
     - -main-is MCISP2K
     - -threaded
     - -rtsopts
-    - -with-rtsopts=-N1
+    - -with-rtsopts=-N
     - -O2
     # - -fno-ignore-asserts
     dependencies:
