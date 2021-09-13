@@ -297,10 +297,10 @@ instance WalkDownInfo (Maybe UpdateInfo) where
     where
       (Tree.Node HSLabel {..} children) = currentNode
       aux :: HSSubTree -> (Maybe UpdateInfo, HSSubTree)
-      aux t@(Tree.Node HSLabel {..} children) =
-        if notFound
-          then (Nothing, t)
-          else (Just $ up {currentStrs = sufMap'}, t)
+      aux t@(Tree.Node HSLabel {..} children)
+        | ipSize hsPref == 0 = (Just up, t)
+        | notFound = (Nothing, t)
+        | otherwise = (Just $ up {currentStrs = sufMap'}, t)
         where
           (sufMap', notFound) = moveSuffixMap currentGenome hsPref currentStrs
 
