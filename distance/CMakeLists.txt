@@ -14,6 +14,8 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 file(GLOB MISC ./misc/*.hpp misc/*.cpp)
 file(GLOB TRANS4 Transposition4/*.hpp ./Transposition4/*.cpp)
 file(GLOB EXTER external/*.hpp external/*.cpp)
+file(GLOB CYCLE cycle/*.hpp cycle/*.cpp)
+file(GLOB HEUR heur/*.hpp heur/*.cpp)
 
 set(CMAKE_CXX_STANDARD 11)
 
@@ -26,7 +28,7 @@ endif()
 #################################################################################################
 
 find_package(OpenMP REQUIRED)
-add_executable(${CMAKE_PROJECT_NAME} main.cpp ${MISC} ${TRANS4} ${EXTER})
+add_executable(${CMAKE_PROJECT_NAME} main_dist.cpp ${MISC} ${TRANS4} ${EXTER} ${CYCLE})
 target_compile_options(dist PRIVATE -Wall PRIVATE "${OpenMP_CXX_FLAGS}")
 target_link_libraries(dist PUBLIC ${CXX_FILESYSTEM_LIBRARIES} PRIVATE "${OpenMP_CXX_FLAGS}")
 
@@ -37,11 +39,20 @@ target_link_libraries(dist PUBLIC ${CXX_FILESYSTEM_LIBRARIES} PRIVATE "${OpenMP_
 enable_testing()
 find_package(OpenMP REQUIRED)
 file(GLOB TEST quickcheck/quickcheck/*.hh)
-add_executable(dist_test test.cpp ${MISC} ${TRANS4} ${TEST} ${EXTER})
+add_executable(dist_test test.cpp ${MISC} ${TRANS4} ${TEST} ${EXTER} ${CYCLE} ${HEUR})
 target_compile_options(dist_test PRIVATE -Wall PRIVATE "${OpenMP_CXX_FLAGS}")
 target_link_libraries(dist_test PUBLIC ${CXX_FILESYSTEM_LIBRARIES} PRIVATE "${OpenMP_CXX_FLAGS}")
 
 add_test(NAME dist_test COMMAND dist_test)
+
+#################################################################################################
+# decomposition
+#################################################################################################
+
+find_package(OpenMP REQUIRED)
+add_executable(dec main_dec.cpp ${MISC} ${CYCLE} ${HEUR})
+target_compile_options(dec PRIVATE -Wall PRIVATE "${OpenMP_CXX_FLAGS}")
+target_link_libraries(dec PUBLIC ${CXX_FILESYSTEM_LIBRARIES} PRIVATE "${OpenMP_CXX_FLAGS}")
 
 #################################################################################################
 

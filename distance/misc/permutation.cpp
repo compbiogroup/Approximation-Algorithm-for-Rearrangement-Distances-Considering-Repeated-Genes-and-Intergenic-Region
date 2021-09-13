@@ -1,6 +1,7 @@
 #include "permutation.hpp"
 #include <algorithm>
 #include <cassert>
+#include <unordered_map>
 
 Permutation::Permutation(const Permutation &pi) {
   genes = unique_ptr<vector<Gene>>(new vector<Gene>(*pi.genes));
@@ -14,10 +15,6 @@ Permutation::Permutation(const Permutation &pi) {
 }
 
 Permutation::Permutation(const Genome &g, const Genome &h, bool duplicate) {
-  fill(g, h, duplicate);
-}
-
-void Permutation::fill(const Genome &g, const Genome &h, bool duplicate) {
   if (duplicate) {
     genes.reset(new vector<Gene>(2 * g.size() - 2));
     intergenic_regions.reset(new vector<IR>(2 * g.size() - 3));
@@ -53,12 +50,12 @@ void Permutation::fill(const Genome &g, const Genome &h, bool duplicate) {
   }
 
   /* Build vector mapping old to new labels */
-  vector<vector<Gene>> labels(h[h.size()] + 1);
+  unordered_map<Gene,vector<Gene>> labels(h[h.size()] + 1);
   for (size_t i = 0; i < h.size(); i++) {
     labels[abs(h[i + 1])].push_back((h[i + 1] >= 0) ? i : -i);
   }
   for (auto &l : labels) {
-    random_shuffle(l.begin(), l.end());
+    random_shuffle(l.second.begin(), l.second.end());
   }
 
   /* Add genes mapping replicas */

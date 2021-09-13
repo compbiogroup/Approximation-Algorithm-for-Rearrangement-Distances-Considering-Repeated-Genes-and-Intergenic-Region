@@ -1,0 +1,105 @@
+#pragma once
+
+#include "../cycle/cycles.hpp"
+#include "../misc/timer.hpp"
+#include "solution.hpp"
+#include <algorithm>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <vector>
+using namespace std;
+
+class Chromossome : public CycleGraph {
+public:
+  Chromossome(const Chromossome &chr) : CycleGraph(chr) {}
+  Chromossome(const CycleGraph &cg) : CycleGraph(cg) {}
+  int fitness() { return this->dec_size(); }
+};
+typedef vector<unique_ptr<Chromossome>> Population;
+
+bool cmp_chr(const unique_ptr<Chromossome> &c1,
+             const unique_ptr<Chromossome> &c2);
+
+class GA {
+protected:
+  unique_ptr<Chromossome> original; // to create new cycle decompositions
+  unique_ptr<Population> population;
+  unique_ptr<Chromossome> best_chr = nullptr;
+  double mutation_rate;
+  double crossover_rate;
+  int population_size;
+  int best_obj;
+  int generations;
+  ostream *os;
+
+  int select_parent(); // Returns index of next selected parent
+  void select_population(unique_ptr<Population> &mutants);
+  bool eval_population(unique_ptr<Population> &, Timer);
+  Chromossome *crossover(const Chromossome &, const Chromossome &) const;
+  void mutation(unique_ptr<Chromossome> &) const;
+
+public:
+  GA(Chromossome *chr, double mutation_rate, double crossover_rate,
+     int initial_size, int population_size, int generations, ostream *os, Timer timer) {
+    this->original = unique_ptr<Chromossome>(chr);
+    this->population_size = population_size;
+    this->population = unique_ptr<Population>(new Population(initial_size));
+    this->mutation_rate = mutation_rate;
+    this->crossover_rate = crossover_rate;
+    this->generations = generations;
+    this->os = os;
+
+    for (int i = 0; i < initial_size; ++i) {
+      (*population)[i] = unique_ptr<Chromossome>(new Chromossome(*original));
+      (*population)[i]->decompose_with_bfs(true);
+    }
+
+    best_obj = numeric_limits<int>::min();
+    eval_population(population, timer);
+    /* sort(population->begin(), population->end(), cmp_chr); */
+    /* random_shuffle(population->begin() + population_size / 2,
+     * population->end()); */
+    /* population->resize(population_size); */
+  }
+
+  int get_best_obj() { return best_obj; }
+  unique_ptr<Chromossome> get_best_chr() { return move(best_chr); }
+
+  void solve(Timer timer) {
+    unique_ptr<Population> offsprings = nullptr;
+    /* int last_impr_gen = 0; */
+
+    for (int g = 1; g <= generations; g++) {
+      bool improved = false;
+
+      offsprings.reset(new Population());
+      for (int i = 1; i < population_size; i += 2) {
+        unique_ptr<Chromossome> &chr1 = (*population)[select_parent()];
+        unique_ptr<Chromossome> &chr2 = (*population)[select_parent()];
+        offsprings->push_back(unique_ptr<Chromossome>(crossover(*chr1, *chr2)));
+        offsprings->push_back(unique_ptr<Chromossome>(crossover(*chr2, *chr1)));
+      }
+      /* improved = improved || eval_population(offsprings); */
+
+      for (auto &chr : *offsprings) {
+        mutation(chr);
+      }
+      improved = improved || eval_population(offsprings, timer);
+
+      // Save new selected chromosomes in population and delete the old ones
+      select_population(offsprings);
+
+      // Stop after given number of generations without improvement
+      /* if (improved) last_impr_gen = g; */
+      /* if (g - last_impr_gen == 100) { */
+      /* 	break; */
+      /* } */
+
+      // Stop after runing out of time
+      /* if (timer.done()) { */
+      /* 	break; */
+      /* } */
+    }
+  }
+};

@@ -11,8 +11,6 @@ public:
   Permutation(const Permutation &pi);
   /* Construct a permutation replicas are mapped randomly */
   Permutation(const Genome &s, const Genome &h, bool duplicate);
-  /* Fill empty permutation */
-  void fill(const Genome &s, const Genome &h, bool duplicate);
   /* Verify if the permutation is sorted and with the correct intergenic region
    * sizes */
   bool is_iota() const;

@@ -1,5 +1,6 @@
 #include "io.hpp"
 #include "genome.hpp"
+#include "../cycle/cycles.hpp"
 #include <iostream>
 #include <sstream>
 
@@ -33,4 +34,30 @@ void output(ostream &os, int dist, double time) {
   os.precision(5);
   os << fixed;
   os << ", Wall Time: " << time << "s" << endl;
+}
+
+void output(ostream &os, const CycleGraph &cyc_dec, double time) {
+  os << "Dec: " << cyc_dec;
+  os.precision(5);
+  os << fixed;
+  os << ", Wall Time: " << time << "s" << endl;
+}
+
+void output(ostream &os, PermsIrs perms_irs) {
+    for (size_t i = 0; i < perms_irs.n - 1; i++) {
+        os << perms_irs.s[i] << " ";
+    }
+    os << perms_irs.s[perms_irs.n - 1] << endl;
+    for (size_t i = 0; i < perms_irs.n - 2; i++) {
+        os << perms_irs.s_ir[i] << " ";
+    }
+    os << perms_irs.s_ir[perms_irs.n - 2] << endl;
+    for (size_t i = 0; i < perms_irs.n - 1; i++) {
+        os << perms_irs.p[i] << " ";
+    }
+    os << perms_irs.p[perms_irs.n - 1] << endl;
+    for (size_t i = 0; i < perms_irs.n - 2; i++) {
+        os << perms_irs.p_ir[i] << " ";
+    }
+    os << perms_irs.p_ir[perms_irs.n - 2] << endl;
 }
