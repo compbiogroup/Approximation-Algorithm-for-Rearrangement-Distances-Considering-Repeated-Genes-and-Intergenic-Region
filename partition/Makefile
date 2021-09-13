@@ -1,9 +1,9 @@
-.PHONY: all test clean without_optimizations
+.PHONY: all test clean debug
 
 all:
 	stack build --test --no-run-tests --copy-bins --local-bin-path .
 
-without_optimizations:
+debug:
 	stack build --fast --test --no-run-tests --copy-bins --local-bin-path .
 
 test:
