@@ -122,7 +122,7 @@ int main(int argc, char *argv[]) {
     if (input_lines->size() % 4 == 1) {
       throw invalid_argument("Number of lines is not multiple of 4.");
     }
-/* #pragma omp parallel for */
+#pragma omp parallel for
     for (size_t i = 0; i < input_lines->size(); i += 4) {
       Timer timer;
       ofstream os;
