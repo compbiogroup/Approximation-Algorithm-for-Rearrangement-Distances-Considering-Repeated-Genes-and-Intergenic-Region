@@ -324,6 +324,9 @@ ostream &operator<<(std::ostream &os, const CycleGraph &cg) {
 void CycleGraph::rem_cycle(Vtx_id i) {
   Vtx_id headtailcorresp_v, headtailcorresp_u;
 
+  if (cycle_weight(i) == 0) {
+      balanced_cycles--;
+  }
   vector<Vtx_id> cycle = get_cycle(i);
 
   assert(cycle.size() % 2 == 0);
@@ -407,6 +410,9 @@ void CycleGraph::add_cycle(vector<Vtx_id> cycle) {
     }
   }
   cycles.push_back(pair<size_t, Vtx_id>(cycle.size(), cycle[0]));
+  if (cycle_weight(cycle[0]) == 0) {
+      balanced_cycles++;
+  }
 }
 
 void CycleGraph::check_and_add_cycle(vector<Vtx_id> cycle) {

@@ -21,7 +21,7 @@ int GA::select_parent() {
 void GA::select_population(unique_ptr<Population> &mutants) {
 
   // Find worse mutant.
-  int worse_obj = (*mutants)[0]->fitness();
+  vector<int> worse_obj = (*mutants)[0]->fitness();
   int worse_idx = 0;
   for (size_t i = 1; i < mutants->size(); ++i) {
     if ((*mutants)[i]->fitness() < worse_obj) {
@@ -31,7 +31,7 @@ void GA::select_population(unique_ptr<Population> &mutants) {
   }
 
   // Find best chromosome from the original population.
-  int best_obj = (*population)[0]->fitness();
+  vector<int> best_obj = (*population)[0]->fitness();
   int best_idx = 0;
   for (size_t i = 1; i < population->size(); ++i) {
     if ((*population)[i]->fitness() < best_obj) {

@@ -62,6 +62,7 @@ struct QEntry {
 class CycleGraph {
 
 private:
+  int balanced_cycles = 0;
   vector<Vertex> vertices;
   vector<pair<size_t, Vtx_id>>
       cycles; // we indentify cycles by one of their vertices and their sizes
@@ -91,6 +92,7 @@ public:
   PermsIrs get_perms();
   /* Get number of cycles from the decomposition */
   int dec_size() const { return cycles.size(); }
+  int dec_balanced_cycles() const {return balanced_cycles; }
   void rem_cycle(Vtx_id i);
   /* Verify if a cycle can be added */
   bool check_cycle(vector<Vtx_id> cycle);

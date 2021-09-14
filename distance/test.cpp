@@ -1,13 +1,14 @@
 #include <algorithm>
 #include <vector>
 
-#include "heur/ga.hpp"
-#include "misc/timer.hpp"
 #include "Transposition4/transposition4.hpp"
 #include "cycle/cycles.hpp"
 #include "external/external.hpp"
+#include "heur/ga.hpp"
 #include "misc/genome.hpp"
+#include "misc/io.hpp"
 #include "misc/permutation.hpp"
+#include "misc/timer.hpp"
 #include "quickcheck/quickcheck/quickcheck.hh"
 using namespace quickcheck;
 
@@ -151,13 +152,18 @@ class GABounds : public Property<TestCycleGraph> {
 
     GA ga = GA(new Chromossome(*t_cg.cg), 0.5, 0.5, 2, 2, 3, out, timer);
     ga.solve(timer);
-    int obj = ga.get_best_obj();
+    vector<int> obj = ga.get_best_obj();
 
     bool sucess = true;
-    sucess = sucess && obj >= 0;
+    sucess = sucess && obj[0] >= 0;
+    sucess = sucess && obj[1] >= 1;
+    sucess = sucess && obj[0] <= int(t_cg.cg->size()) / 4;
+    sucess = sucess && obj[1] <= int(t_cg.cg->size()) / 4;
     if (!sucess) {
       cout << "cg: " << *t_cg.cg << endl;
-      cout << "obj: " << obj << endl;
+      cout << "cg_size: " << t_cg.cg->size() << endl;
+      cout << "obj: ";
+      print_vec(cout, obj);
     } else {
       cout << ".";
       cout.flush();

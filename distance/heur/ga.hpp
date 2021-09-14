@@ -14,7 +14,17 @@ class Chromossome : public CycleGraph {
 public:
   Chromossome(const Chromossome &chr) : CycleGraph(chr) {}
   Chromossome(const CycleGraph &cg) : CycleGraph(cg) {}
-  int fitness() { return this->dec_size(); }
+  /* vector<int> fitness() { */
+  /*   vector<int> fit(1); */
+  /*   fit[0] = this->dec_size(); */
+  /*   return fit; */
+  /* } */
+  vector<int> fitness() {
+    vector<int> fit(2);
+    fit[0] = this->dec_balanced_cycles();
+    fit[1] = this->dec_size();
+    return fit;
+  };
 };
 typedef vector<unique_ptr<Chromossome>> Population;
 
@@ -29,7 +39,7 @@ protected:
   double mutation_rate;
   double crossover_rate;
   int population_size;
-  int best_obj;
+  vector<int> best_obj;
   int generations;
   ostream *os;
 
@@ -41,7 +51,8 @@ protected:
 
 public:
   GA(Chromossome *chr, double mutation_rate, double crossover_rate,
-     int initial_size, int population_size, int generations, ostream *os, Timer timer) {
+     int initial_size, int population_size, int generations, ostream *os,
+     Timer timer) {
     this->original = unique_ptr<Chromossome>(chr);
     this->population_size = population_size;
     this->population = unique_ptr<Population>(new Population(initial_size));
@@ -55,7 +66,7 @@ public:
       (*population)[i]->decompose_with_bfs(true);
     }
 
-    best_obj = numeric_limits<int>::min();
+    best_obj = vector<int>(2,numeric_limits<int>::min());
     eval_population(population, timer);
     /* sort(population->begin(), population->end(), cmp_chr); */
     /* random_shuffle(population->begin() + population_size / 2,
@@ -63,7 +74,7 @@ public:
     /* population->resize(population_size); */
   }
 
-  int get_best_obj() { return best_obj; }
+  vector<int> get_best_obj() { return best_obj; }
   unique_ptr<Chromossome> get_best_chr() { return move(best_chr); }
 
   void solve(Timer timer) {
