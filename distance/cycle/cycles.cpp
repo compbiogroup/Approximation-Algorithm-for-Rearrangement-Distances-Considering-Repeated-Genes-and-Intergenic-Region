@@ -182,17 +182,33 @@ void CycleGraph::bfs(Vtx_id start, bool is_random) {
     }
   } while (q1[pos]->vtx != start);
 
-  entry = move(q1[pos]);
+  /* Find balanced cycle in level if it exists */
   vector<Vtx_id> cycle;
-  Vtx_id u, v;
-  v = start;
-  do {
-    u = vertices[v].black;
-    cycle.push_back(v);
-    cycle.push_back(u);
-    v = entry->fixed[u];
-  } while (v != start);
-  add_cycle(cycle);
+  bool ok = false;
+  for (;pos < q1.size(); pos++) {
+      if (q1[pos]->vtx == start) {
+          entry = move(q1[pos]);
+          cycle.clear();
+          Vtx_id u, v;
+          int weigth = 0;
+          v = start;
+          do {
+            weigth += vertices[v].weigth;
+            u = vertices[v].black;
+            cycle.push_back(v);
+            cycle.push_back(u);
+            v = entry->fixed[u];
+          } while (v != start);
+          if (weigth == 0) {
+              ok = true;
+              add_cycle(cycle);
+              break;
+          }
+      }
+  }
+  if (!ok) {
+      add_cycle(cycle);
+  }
 }
 
 string CycleGraph::show_cycles() const {
