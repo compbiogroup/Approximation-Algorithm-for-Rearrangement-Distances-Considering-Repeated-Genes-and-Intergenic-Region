@@ -57,7 +57,7 @@ int Genome::occ_max() const {
 void Genome::reversal(Gene i, Gene j, IR x, IR y) {
 
   assert(2 <= i);
-  assert(i < j);
+  assert(i <= j);
   assert(j < int(size()));
   assert(0 <= x && x <= (*intergenic_regions)[i - 2]);
   assert(0 <= y && y <= (*intergenic_regions)[j - 1]);

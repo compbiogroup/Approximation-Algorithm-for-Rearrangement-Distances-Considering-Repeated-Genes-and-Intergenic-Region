@@ -50,7 +50,7 @@ Permutation::Permutation(const Genome &g, const Genome &h, bool duplicate) {
   }
 
   /* Build vector mapping old to new labels */
-  unordered_map<Gene,vector<Gene>> labels(h[h.size()] + 1);
+  unordered_map<Gene, vector<Gene>> labels(h[h.size()] + 1);
   for (size_t i = 0; i < h.size(); i++) {
     labels[abs(h[i + 1])].push_back((h[i + 1] >= 0) ? i : -i);
   }
@@ -77,7 +77,7 @@ Permutation::Permutation(const Genome &g, const Genome &h, bool duplicate) {
     labels[abs(g[i])].pop_back();
   }
   if (duplicate) {
-    (*genes)[2 * g.size() - 3] = 2*labels[g[g.size()]].back() - 1;
+    (*genes)[2 * g.size() - 3] = 2 * labels[g[g.size()]].back() - 1;
   } else {
     (*genes)[g.size() - 1] = labels[g[g.size()]].back();
   }
@@ -100,34 +100,64 @@ bool Permutation::is_iota() const {
   return ok;
 }
 
-bool Permutation::breakpoint(Gene ai) const {
-  int i = pos(ai)[0];
-  return soft_breakpoint(ai) ||
-         (*intergenic_regions)[i - 1] !=
-             (*intergenic_regions_target)[(*genes)[i - 1]];
-}
-bool Permutation::hard_breakpoint(Gene ai) const {
-  int i = pos(ai)[0];
-  return !soft_breakpoint(ai) &&
-         (*intergenic_regions)[i - 1] !=
-             (*intergenic_regions_target)[(*genes)[i - 1]];
-}
-bool Permutation::soft_breakpoint(Gene ai) const {
-  int i = pos(ai)[0];
-  return (*genes)[i] - (*genes)[i - 1] != 1;
-}
-bool Permutation::overcharged_breakpoint(Gene ai) const {
-  int i = pos(ai)[0];
-  return !soft_breakpoint(ai) &&
-         (*intergenic_regions)[i - 1] >
-             (*intergenic_regions_target)[(*genes)[i - 1]];
+int Permutation::target_ir(int i, bool use_abs) const {
+  if (use_abs) {
+    return (*intergenic_regions_target)[min((*genes)[i - 1], (*genes)[i])];
+  } else {
+    return (*intergenic_regions_target)[(*genes)[i - 1]];
+  }
 }
 
-bool Permutation::undercharged_breakpoint(Gene ai) const {
+bool Permutation::breakpoint(Gene ai, bool use_abs) const {
   int i = pos(ai)[0];
-  return !soft_breakpoint(ai) &&
-         (*intergenic_regions)[i - 1] <
-             (*intergenic_regions_target)[(*genes)[i - 1]];
+  return soft_breakpoint(ai, use_abs) ||
+         (*intergenic_regions)[i - 1] != target_ir(i, use_abs);
+}
+bool Permutation::hard_breakpoint(Gene ai, bool use_abs) const {
+  int i = pos(ai)[0];
+  return !soft_breakpoint(ai, use_abs) &&
+         (*intergenic_regions)[i - 1] != target_ir(i, use_abs);
+}
+bool Permutation::soft_breakpoint(Gene ai, bool use_abs) const {
+  int i = pos(ai)[0];
+  if (use_abs) {
+    return abs((*genes)[i] - (*genes)[i - 1]) != 1;
+  } else {
+    return (*genes)[i] - (*genes)[i - 1] != 1;
+  }
+}
+bool Permutation::overcharged_breakpoint(Gene ai, bool use_abs) const {
+  int i = pos(ai)[0];
+  return !soft_breakpoint(ai, use_abs) &&
+         (*intergenic_regions)[i - 1] > target_ir(i, use_abs);
+}
+
+bool Permutation::undercharged_breakpoint(Gene ai, bool use_abs) const {
+  int i = pos(ai)[0];
+  return !soft_breakpoint(ai, use_abs) &&
+         (*intergenic_regions)[i - 1] < target_ir(i, use_abs);
+}
+
+bool Permutation::is_block(Gene ai, Gene bi, bool use_abs) const {
+    int i = pos(ai)[0];
+    int j = pos(bi)[0];
+    if (use_abs) {
+        if (abs(ai - bi) != 1) {
+          return false;
+        }
+        if (abs(i - j) != 1) {
+          return false;
+        }
+        return (*intergenic_regions)[min(i, j) - 1] == (*intergenic_regions_target)[min(ai, bi)];
+    } else {
+        if (bi - ai != 1) {
+          return false;
+        }
+        if (j - i != 1) {
+          return false;
+        }
+        return (*intergenic_regions)[i - 1] == (*intergenic_regions_target)[ai];
+    }
 }
 
 void Permutation::serialize(ostream &os) const {

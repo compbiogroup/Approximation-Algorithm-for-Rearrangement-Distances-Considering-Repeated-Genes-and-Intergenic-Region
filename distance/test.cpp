@@ -1,7 +1,8 @@
 #include <algorithm>
 #include <vector>
 
-#include "Transposition4/transposition4.hpp"
+#include "distance_algorithms/transposition4.hpp"
+#include "distance_algorithms/reversal4.hpp"
 #include "cycle/cycles.hpp"
 #include "external/external.hpp"
 #include "heur/ga.hpp"
@@ -120,19 +121,46 @@ void generate(size_t n, TestCycleGraph &t_cg) {
 
 class PBounds4T : public Property<TestPerm> {
   bool holdsFor(const TestPerm &t_perm) {
-    Transposition4 trans_alg;
+    Transposition4 alg;
 
     int breaks_count = 0;
     for (size_t b = 1; b <= t_perm.perm->size() - 1; b++) {
-      if (t_perm.perm->breakpoint((*t_perm.perm)[b]))
+      if (t_perm.perm->breakpoint((*t_perm.perm)[b], false))
         breaks_count++;
     }
 
-    int dist = trans_alg.estimate_distance(*t_perm.perm);
+    int dist = alg.estimate_distance(*t_perm.perm);
 
     bool sucess = true;
     sucess = sucess && dist >= (breaks_count / 3);
     sucess = sucess && dist <= (4 * breaks_count / 3);
+    if (!sucess) {
+      cout << "pi: " << *t_perm.perm << endl;
+      cout << "dist: " << dist << endl;
+      cout << "b(pi):" << breaks_count << endl;
+    } else {
+      cout << ".";
+      cout.flush();
+    }
+    return sucess;
+  }
+};
+
+class PBounds4R : public Property<TestPerm> {
+  bool holdsFor(const TestPerm &t_perm) {
+    Reversal4 alg;
+
+    int breaks_count = 0;
+    for (size_t b = 1; b <= t_perm.perm->size() - 1; b++) {
+      if (t_perm.perm->breakpoint((*t_perm.perm)[b], true))
+        breaks_count++;
+    }
+
+    int dist = alg.estimate_distance(*t_perm.perm);
+
+    bool sucess = true;
+    sucess = sucess && dist >= (breaks_count / 2);
+    sucess = sucess && dist <= (4 * breaks_count / 2);
     if (!sucess) {
       cout << "pi: " << *t_perm.perm << endl;
       cout << "dist: " << dist << endl;
@@ -174,10 +202,14 @@ class GABounds : public Property<TestCycleGraph> {
 
 int main() {
   // set seed
-  srand(time(nullptr));
+  int seed = time(nullptr);
+  cout << "seed: " << seed << endl;
+  srand(seed);
 
   check<PBounds4T>(
       "upper and lower bounds hold for factor 4 algorithm for transposition");
+  check<PBounds4R>(
+      "upper and lower bounds hold for factor 4 algorithm for reversal");
   check<GABounds>(
       "upper and lower bounds hold for cycle decomposition with ga");
   return 0;

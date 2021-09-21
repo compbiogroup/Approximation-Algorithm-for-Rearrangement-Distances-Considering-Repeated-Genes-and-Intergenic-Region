@@ -1,4 +1,3 @@
-#include "Transposition4/transposition4.hpp"
 #include "cycle/cycles.hpp"
 #include "external/external.hpp"
 #include "heur/ga.hpp"

@@ -1,4 +1,5 @@
-#include "Transposition4/transposition4.hpp"
+#include "distance_algorithms/reversal4.hpp"
+#include "distance_algorithms/transposition4.hpp"
 #include "external/external.hpp"
 #include "misc/genome.hpp"
 #include "misc/io.hpp"
@@ -29,7 +30,8 @@ void help(char *name) {
        << "\t" << name << " ALG [OPTIONS]" << endl
        << endl
        << "positional arguments:" << endl
-       << "\tALG                     the algorithm to use (transposition4, or "
+       << "\tALG                     the algorithm to use (transposition4, "
+          "reversal4, or "
           "the name of an executable in the external folder)"
        << endl
        << endl
@@ -113,6 +115,8 @@ int main(int argc, char *argv[]) {
   // set algorithm
   if (args.alg == "transposition4") {
     alg.reset(new Transposition4());
+  } else if (args.alg == "reversal4") {
+    alg.reset(new Reversal4());
   } else {
     alg.reset(new ExternalDistAlg("external/" + args.alg));
   }

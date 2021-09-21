@@ -49,7 +49,7 @@ int Transposition4::estimate_distance(Permutation pi) {
              // excess of nucleotides or there is no soft breakpoints
 
   for (size_t b = 1; b <= pi.size() - 1; b++) {
-    if (pi.breakpoint(pi[b]))
+    if (pi.breakpoint(pi[b], false))
       breaks.insert(pi[b]);
   }
   size_t breaks_size = breaks.size() + 1;
@@ -68,7 +68,7 @@ int Transposition4::estimate_distance(Permutation pi) {
     Gene other = -1;
 
     for (auto b : breaks) {
-      if (over.size() < 2 && pi.overcharged_breakpoint(b)) {
+      if (over.size() < 2 && pi.overcharged_breakpoint(b, false)) {
         over.push_back(b);
       } else {
         other = b;
@@ -97,10 +97,10 @@ int Transposition4::estimate_distance(Permutation pi) {
                          idxs_ir[2].second);
       dist += 2;
       for (auto b : over) {
-        if (not pi.breakpoint(b))
+        if (not pi.breakpoint(b, false))
           breaks.erase(b);
       }
-      if (not pi.breakpoint(other))
+      if (not pi.breakpoint(other, false))
         breaks.erase(other);
       continue;
     }
@@ -108,7 +108,7 @@ int Transposition4::estimate_distance(Permutation pi) {
     // If there exists a soft breakpoint with excess of nucleotides
     int a, c;
     for (auto b : breaks) {
-      if (pi.soft_breakpoint(b) &&
+      if (pi.soft_breakpoint(b, false) &&
           pi.get_ir(pi.pos(b)[0]) >= pi.get_ir_target(b + 1)) {
         i = pi.pos(b)[0];
         a = b;
@@ -149,17 +149,17 @@ int Transposition4::estimate_distance(Permutation pi) {
                 pi.transposition(k + 1, i + 1, l + 1, 0,
                                  pi.get_ir(i) - pi.get_ir_target(pi[k] + 1), 0);
               }
-              if (not pi.breakpoint(d))
+              if (not pi.breakpoint(d, false))
                 breaks.erase(d);
             } else {
               pi.transposition(k + 1, i + 1, j, 0, pi.get_ir_target(pi[i] + 1),
                                pi.get_ir(j - 1));
             }
-            if (not pi.breakpoint(a))
+            if (not pi.breakpoint(a, false))
               breaks.erase(a);
-            if (not pi.breakpoint(b))
+            if (not pi.breakpoint(b, false))
               breaks.erase(b);
-            if (not pi.breakpoint(c))
+            if (not pi.breakpoint(c, false))
               breaks.erase(c);
             break;
           } else if (k >= j) {
@@ -187,17 +187,17 @@ int Transposition4::estimate_distance(Permutation pi) {
                                  pi.get_ir(i) - pi.get_ir_target(pi[k] + 1), 0,
                                  0);
               }
-              if (not pi.breakpoint(d))
+              if (not pi.breakpoint(d, false))
                 breaks.erase(d);
             } else {
               pi.transposition(i + 1, j, k + 1, pi.get_ir_target(pi[i] + 1),
                                pi.get_ir(j - 1), 0);
             }
-            if (not pi.breakpoint(a))
+            if (not pi.breakpoint(a, false))
               breaks.erase(a);
-            if (not pi.breakpoint(b))
+            if (not pi.breakpoint(b, false))
               breaks.erase(b);
-            if (not pi.breakpoint(c))
+            if (not pi.breakpoint(c, false))
               breaks.erase(c);
             break;
           }
@@ -229,17 +229,17 @@ int Transposition4::estimate_distance(Permutation pi) {
                 pi.transposition(j, l + 1, i + 1, pi.get_ir(j - 1), 0,
                                  pi.get_ir_target(pi[i] + 1));
               }
-              if (not pi.breakpoint(d))
+              if (not pi.breakpoint(d, false))
                 breaks.erase(d);
             } else {
               pi.transposition(j, k + 1, i + 1, pi.get_ir(j - 1), 0,
                                pi.get_ir_target(pi[i] + 1));
             }
-            if (not pi.breakpoint(a))
+            if (not pi.breakpoint(a, false))
               breaks.erase(a);
-            if (not pi.breakpoint(b))
+            if (not pi.breakpoint(b, false))
               breaks.erase(b);
-            if (not pi.breakpoint(c))
+            if (not pi.breakpoint(c, false))
               breaks.erase(c);
             break;
           }
@@ -254,7 +254,7 @@ int Transposition4::estimate_distance(Permutation pi) {
     assert(!over.empty());
     Gene under = -1;
     for (auto b : breaks) {
-      if (pi.undercharged_breakpoint(b)) {
+      if (pi.undercharged_breakpoint(b, false)) {
         under = b;
         break;
       }
@@ -272,7 +272,7 @@ int Transposition4::estimate_distance(Permutation pi) {
       if (other == -1) {
         assert(old_sum == new_sum);
         for (size_t b = 1; b <= pi.size() - 1; b++) {
-          if (!pi.breakpoint(pi[b]))
+          if (!pi.breakpoint(pi[b], false))
             other = pi[b];
         }
       } else {
@@ -290,11 +290,11 @@ int Transposition4::estimate_distance(Permutation pi) {
                          idxs_ir[2].first, idxs_ir[0].second, idxs_ir[1].second,
                          idxs_ir[2].second);
       dist += 2;
-      if (not pi.breakpoint(over[0]))
+      if (not pi.breakpoint(over[0], false))
         breaks.erase(over[0]);
-      if (not pi.breakpoint(under))
+      if (not pi.breakpoint(under, false))
         breaks.erase(under);
-      if (not pi.breakpoint(other))
+      if (not pi.breakpoint(other, false))
         breaks.erase(other);
     } else {
       vector<Gene> softs;
@@ -322,11 +322,11 @@ int Transposition4::estimate_distance(Permutation pi) {
                          idxs_ir[2].first, idxs_ir[0].second, idxs_ir[1].second,
                          idxs_ir[2].second);
       dist += 2;
-      if (not pi.breakpoint(over[0]))
+      if (not pi.breakpoint(over[0], false))
         breaks.erase(over[0]);
-      if (not pi.breakpoint(softs[0]))
+      if (not pi.breakpoint(softs[0], false))
         breaks.erase(softs[0]);
-      if (not pi.breakpoint(softs[1]))
+      if (not pi.breakpoint(softs[1], false))
         breaks.erase(softs[1]);
       single_excess = true;
     }
