@@ -1,45 +1,9 @@
 #include "transposition4.hpp"
 #include "../misc/permutation.hpp"
+#include "aux.hpp"
 #include <algorithm>
 #include <cassert>
 #include <set>
-
-void transposition_move(Permutation &pi, Gene i, Gene j, Gene k, IR x_, IR y_,
-                        IR z_) {
-  int x1, x2, x3, y1, y2, y3, z1, z2, z3;
-  int x = pi.get_ir(i), y = pi.get_ir(j), z = pi.get_ir(k);
-
-  x1 = min(x, x_);
-  x -= x1;
-  x_ -= x1;
-  y1 = min(y, x_);
-  y -= y1;
-  x_ -= y1;
-  z1 = min(z, x_);
-  z -= z1;
-  x_ -= z1;
-  x2 = min(x, y_);
-  x -= x2;
-  y_ -= x2;
-  y2 = min(y, y_);
-  y -= y2;
-  y_ -= y2;
-  z2 = min(z, y_);
-  z -= z2;
-  y_ -= z2;
-  x3 = min(x, z_);
-  x -= x3;
-  z_ -= x3;
-  y3 = min(y, z_);
-  y -= y3;
-  z_ -= y3;
-  z3 = min(z, z_);
-  z -= z3;
-  z_ -= z3;
-
-  pi.transposition(i + 1, j + 1, k + 1, x1 + x2, y2 + y3, z1);
-  pi.transposition(i + 1, i + k - j + 1, k + 1, x1 + y1, x3, y2 + z2);
-}
 
 int Transposition4::estimate_distance(Permutation pi) {
   int i, j, k, dist = 0;

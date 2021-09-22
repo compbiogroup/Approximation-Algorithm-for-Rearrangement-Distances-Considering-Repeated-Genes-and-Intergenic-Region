@@ -1,5 +1,6 @@
 #include "distance_algorithms/reversal4.hpp"
 #include "distance_algorithms/transposition4.hpp"
+#include "distance_algorithms/reversal_transposition45.hpp"
 #include "external/external.hpp"
 #include "misc/genome.hpp"
 #include "misc/io.hpp"
@@ -117,6 +118,8 @@ int main(int argc, char *argv[]) {
     alg.reset(new Transposition4());
   } else if (args.alg == "reversal4") {
     alg.reset(new Reversal4());
+  } else if (args.alg == "reversal_transposition45") {
+    alg.reset(new ReversalTransposition45());
   } else {
     alg.reset(new ExternalDistAlg("external/" + args.alg));
   }

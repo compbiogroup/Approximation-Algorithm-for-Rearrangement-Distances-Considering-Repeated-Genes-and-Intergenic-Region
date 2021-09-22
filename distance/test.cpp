@@ -3,6 +3,7 @@
 
 #include "distance_algorithms/transposition4.hpp"
 #include "distance_algorithms/reversal4.hpp"
+#include "distance_algorithms/reversal_transposition45.hpp"
 #include "cycle/cycles.hpp"
 #include "external/external.hpp"
 #include "heur/ga.hpp"
@@ -173,6 +174,33 @@ class PBounds4R : public Property<TestPerm> {
   }
 };
 
+class PBounds45RT : public Property<TestPerm> {
+  bool holdsFor(const TestPerm &t_perm) {
+    ReversalTransposition45 alg;
+
+    int breaks_count = 0;
+    for (size_t b = 1; b <= t_perm.perm->size() - 1; b++) {
+      if (t_perm.perm->breakpoint((*t_perm.perm)[b], true))
+        breaks_count++;
+    }
+
+    int dist = alg.estimate_distance(*t_perm.perm);
+
+    bool sucess = true;
+    sucess = sucess && dist >= (breaks_count / 3);
+    sucess = sucess && dist <= (4.5 * breaks_count / 3);
+    if (!sucess) {
+      cout << "pi: " << *t_perm.perm << endl;
+      cout << "dist: " << dist << endl;
+      cout << "b(pi):" << breaks_count << endl;
+    } else {
+      cout << ".";
+      cout.flush();
+    }
+    return sucess;
+  }
+};
+
 class GABounds : public Property<TestCycleGraph> {
   bool holdsFor(const TestCycleGraph &t_cg) {
     Timer timer;
@@ -210,6 +238,8 @@ int main() {
       "upper and lower bounds hold for factor 4 algorithm for transposition");
   check<PBounds4R>(
       "upper and lower bounds hold for factor 4 algorithm for reversal");
+  check<PBounds45RT>(
+      "upper and lower bounds hold for factor 4.5 algorithm for reversal and transposition");
   check<GABounds>(
       "upper and lower bounds hold for cycle decomposition with ga");
   return 0;
