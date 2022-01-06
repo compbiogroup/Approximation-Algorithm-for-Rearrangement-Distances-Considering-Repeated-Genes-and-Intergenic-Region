@@ -9,7 +9,7 @@
 -- Maintainer  : gabriel.gabrielhs@gmail.com
 module MCISP2K where
 
-import Control.Concurrent.ParallelIO.Global (parallel, stopGlobalPool)
+import Control.Concurrent.ParallelIO.Global (parallel_, stopGlobalPool)
 import Control.DeepSeq (force)
 import qualified Data.ByteString.Char8 as BS
 import Data.Time (diffUTCTime, getCurrentTime)
@@ -68,29 +68,25 @@ main :: IO ()
 main = do
   args <- execParser opts
   contents <- BS.readFile (input args)
-  let pairs = toQuadruples . filter ((/= '#') . BS.head) . BS.lines $ contents
-  ans <-
-    if noParallel args
-      then mapM (runOne args) pairs
-      else do
-        ans <- parallel $ map (runOne args) pairs
+  let pairs = zip [(1::Int)..] . toQuadruples . filter ((/= '#') . BS.head) . BS.lines $ contents
+  if noParallel args
+    then mapM_ (runOne args) pairs
+    else do
+        parallel_ $ map (runOne args) pairs
         stopGlobalPool
-        return ans
-  BS.writeFile (output args) . BS.unlines . fromAns $ ans
   where
-    runOne args bstrs = do
+    runOne args (i, bstrs) = do
       start <- getCurrentTime
       let !bstrs' = force $ simplifyGenomes (partType args) (signed args) bstrs
       end <- getCurrentTime
       let time = BS.pack . show . realToFrac $ diffUTCTime end start
-      return (bstrs', "# Time: " <> (BS.pack . show $ time))
+      BS.writeFile (output args ++ "_" ++ show i) . BS.unlines $ fromAns (bstrs', "# Time: " <> (BS.pack . show $ time))
 
     toQuadruples (s1 : i1 : s2 : i2 : ss) = (s1, i1, s2, i2) : toQuadruples ss
     toQuadruples [] = []
     toQuadruples _ = error "Incorrect number of lines."
 
-    fromAns (((s1, i1, s2, i2), time) : ss) = s1 : i1 : s2 : i2 : time : fromAns ss
-    fromAns [] = []
+    fromAns ((s1, i1, s2, i2), time)  = s1 : i1 : s2 : i2 : [time]
 
 simplifyGenomes :: PartitionType -> Sign -> (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString) -> (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString)
 simplifyGenomes ptype signed (s1, i1, s2, i2) = (s1', i1', s2', i2')
