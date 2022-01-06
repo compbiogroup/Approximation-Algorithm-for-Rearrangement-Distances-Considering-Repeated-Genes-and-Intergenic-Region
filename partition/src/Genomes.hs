@@ -36,6 +36,7 @@ module Genomes
     fromLists,
     genePair,
     genomeSize,
+    alphabet,
     intToGene,
     interleaveListRepresentation,
     interleaveListToGenome,
@@ -49,6 +50,8 @@ module Genomes
     sliceGenome,
     reversal,
     transposition,
+    insertion,
+    deletion,
     subGenCount,
     subGenome,
     toLists,
@@ -92,7 +95,7 @@ newtype IR = IR Int deriving newtype (Eq, Show, Read, Num, Ord, Random)
 
 newtype Idx = Idx Int deriving newtype (Eq, Show, Read, Num, Ord, Enum, Random, Integral, Real)
 
-newtype Gene = Gene Int deriving newtype (Eq, Show, Read, Hashable, Ord, Num, Random)
+newtype Gene = Gene Int deriving newtype (Eq, Show, Read, Hashable, Ord, Num, Random, Bounded)
 
 type Gstring = Vector Gene
 
@@ -156,7 +159,7 @@ instance Show Genome where
     unwords . (("(" ++ head str_s ++ ")") :) $
       zipWith (\ir a -> "- " ++ ir ++ " - (" ++ a ++ ")") str_i (tail str_s)
     where
-      str_s = Vec.toList $ show <$> gstring g
+      str_s = Vec.toList $ (\i -> if i == maxBound then "inf" else show i) <$> gstring g
       str_i = Vec.toList $ show <$> irList g
 
 instance Orientable Genome where
@@ -192,20 +195,20 @@ instance Orientable Genome where
 --      Random Generation     --
 --------------------------------
 
-randomGenome :: MonadRandom mon => Size -> Int -> Sign -> mon Genome
-randomGenome size lim signed = do
+randomGenome :: MonadRandom mon => Bool -> Size -> Int -> Sign -> mon Genome
+randomGenome zeros size lim signed = do
   coins <- getRandoms
   ls <- case signed of
     Unsigned -> take n <$> getRandomRs (1, coerce lim)
     Signed -> zipWith swaps coins . take n <$> getRandomRs (1, coerce lim)
-  li <- take (n + 1) <$> getRandomRs (1, 100)
+  li <- take (n + 1) <$> if zeros then return (repeat 0) else getRandomRs (1, 100)
   return $ fromLists True signed ls li
   where
     n = fromIntegral size
     swaps b v = if b then v else invOri v
 
-randomGenomeWithReplicas :: MonadRandom mon => Size -> Int -> Int -> Int -> Sign -> mon Genome
-randomGenomeWithReplicas size rep low high signed = do
+randomGenomeWithReplicas :: MonadRandom mon => Bool -> Size -> Int -> Int -> Int -> Sign -> mon Genome
+randomGenomeWithReplicas zeros size rep low high signed = do
   coins <- getRandoms
   occs <- getRandomRs (fromIntegral low, fromIntegral high)
   let ls =
@@ -218,7 +221,7 @@ randomGenomeWithReplicas size rep low high signed = do
           . zipWith replicate occs
           . coerce
           $ [1 .. rep]
-  li <- take (n + 1) <$> getRandomRs (1, 100)
+  li <- take (n + 1) <$> if zeros then return (repeat 0) else getRandomRs (1, 100)
   return $ fromLists True signed ls li
   where
     n = fromIntegral size
@@ -286,7 +289,7 @@ fromLists extend sign ls_ li = Genome (Vec.fromList ls) (Vec.fromList li) ilr si
     ls__ = case sign of Signed -> map canonicOri ls_; Unsigned -> ls_
     ls =
       if extend
-        then 0 : (ls_ ++ [if null ls_ then 1 else maximum ls__ + 1])
+        then 0 : (ls_ ++ [maxBound])
         else ls_
 
 toLists :: Bool -> Genome -> (Sign, [Gene], [IR])
@@ -400,6 +403,57 @@ reversal i j x y g =
     y_rest :: IR
     y_rest = (vi ! (coerce j - 1)) - y
 
+deletion :: Idx -> Idx -> IR -> Genome -> Genome
+deletion i j x g =
+  assert (2 <= i)
+    . assert (i < j)
+    . assert (j <= coerce (genomeSize g))
+    . assert (0 <= x && x <= (vi ! (coerce i - 2)) + (vi ! (coerce j - 2)))
+    $ Genome vs' vi' ilr (genomeIsSigned g)
+  where
+    ilr = Vec.fromList $ interleavelists ls_bs li_bs
+    ls_bs = fmap geneToBS . toList $ vs'
+    li_bs = fmap irToBS . toList $ vi'
+    vs' =
+      Vec.slice 0 (coerce i - 1) vs
+        Vec.++ Vec.slice (coerce j - 1) (Vec.length vs - coerce j + 1) vs
+    vi' =
+      Vec.slice 0 (coerce i - 2) vi
+        Vec.++ Vec.fromList [x]
+        Vec.++ if coerce j == genomeSize g
+          then Vec.empty
+          else Vec.slice (coerce j - 1) (Vec.length vi - coerce j + 1) vi
+
+    vs = gstring g
+    vi = irList g
+
+-- Genome to be inserted must be open (n genes and n+1 itergenic regions)
+insertion :: Idx -> Genome -> Genome -> Genome
+insertion i x g =
+  assert (1 <= i)
+    . assert (i <= coerce (genomeSize g) - 1)
+    $ Genome vs' vi' ilr (genomeIsSigned g)
+  where
+    ilr = Vec.fromList $ interleavelists ls_bs li_bs
+    ls_bs = fmap geneToBS . toList $ vs'
+    li_bs = fmap irToBS . toList $ vi'
+    vs' =
+      Vec.slice 0 (coerce i) vs
+        Vec.++ vsx
+        Vec.++ Vec.slice (coerce i) (Vec.length vs - coerce i) vs
+    vi' =
+      ( if i == 1
+          then Vec.empty
+          else Vec.slice 0 (coerce i - 1) vi
+      )
+        Vec.++ vix
+        Vec.++ Vec.slice (coerce i) (Vec.length vi - coerce i) vi
+
+    vs = gstring g
+    vi = irList g
+    vsx = gstring x
+    vix = irList x
+
 irByIdx :: Genome -> Idx -> IR
 irByIdx g idx = irList g ! (coerce idx - 1)
 
@@ -435,6 +489,9 @@ occurence g a = sum . fmap (\x -> if x == a then 1 else 0) . gstring $ g
 
 occurenceMax :: Genome -> Int
 occurenceMax g = maximum . fmap (g `occurence`) . gstring $ g
+
+alphabet :: Genome -> [Gene]
+alphabet = unique . toList . gstring
 
 balanced :: Genome -> Genome -> Bool
 balanced g h = balancedGenes && balancedIR

@@ -27,6 +27,7 @@ where
 import Control.Arrow (first, second)
 import Control.Exception (assert)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BS
 import Data.Coerce (coerce)
 import Data.Foldable (toList)
 import qualified Data.List as List
@@ -77,7 +78,8 @@ data Tmin = Tmin !PartitionType !Sign HSSTree deriving (Show, Eq)
 --  Size with the genome size
 --  does not contain the characters marking the end of strings.
 data HSSTree = HSRoot
-  { rSize :: !Size,
+  { gSize :: !Size,
+    hSize :: !Size,
     rChildren :: [HSSubTree]
   }
   deriving (Eq)
@@ -87,7 +89,9 @@ type HSSubTree = Tree HSLabel
 instance Show HSSTree where
   show HSRoot {..} =
     "Genome Size:"
-      ++ show rSize
+      ++ show gSize
+      ++ ", "
+      ++ show hSize
       ++ "\n"
       ++ Tree.drawForest (map (fmap show) rChildren)
 
@@ -126,7 +130,7 @@ instance Show HSLabel where
       ++ ( case hsInfo of
              LeafInfo {..} ->
                (if isInG == InG then " - G" else " - H")
-                 ++ ", up:"
+                 ++ ", lbd:"
                  ++ show lastBreakDistance
                  ++ (if isRev == LR then "" else " R")
                  ++ (if available then "" else " X")
@@ -141,7 +145,6 @@ data STree
 makeTmin :: PartitionType -> Genome -> Genome -> Tmin
 makeTmin ptype g h = Tmin ptype (genomeIsSigned g) $ makeHSSTree sTree
   where
-    n = genomeSize g
     l1 = interleaveListRepresentation g
     l2 = interleaveListRepresentation h
     rl1 = interleaveListRepresentation (invOri g)
@@ -187,7 +190,7 @@ makeTmin ptype g h = Tmin ptype (genomeIsSigned g) $ makeHSSTree sTree
     -- Convert the suffix tree to HSSTree
     makeHSSTree Leaf = error patternError
     makeHSSTree (Node edges) =
-      HSRoot n ((\ts -> assert (fmap getG ts == fmap getH ts) ts) subTrees)
+      HSRoot (genomeSize g) (genomeSize h) subTrees
       where
         subTrees = concat $ mapMaybe makeSubHSSTree edges
         makeSubHSSTree e@(idxPair, t) =
@@ -406,16 +409,22 @@ getGenome (Tmin ptype sign HSRoot {..}) =
     toGenome :: ([IdxPair], Size, Size, IsInG, Ori) -> (Genome, GenomePosition)
     -- Size is the size of the suffix after the sub-genome occurrence
     -- and the boolean indicate whether the occurrence is in A
-    toGenome (idxPairs, _, suf_size, inG, ori) =
-      (g,) $
+    toGenome (idxPairs, _, suf_size_, inG, ori) =
+      (x,) $
         if inG == InG
-          then G idx (rSize - genomeSize g) LR
-          else H idx (rSize - genomeSize g) LR
+          then G idx (gSize - genomeSize x) LR
+          else H idx (hSize - genomeSize x) LR
       where
-        g_ = interleaveListToGenome (idxsToVector idxPairs) sign
-        (idx, g) = case ori of
-          LR -> (coerce $ rSize - suf_size `div` 2 - genomeSize g + 1, g_)
-          RL -> (coerce $ suf_size `div` 2 + 1, invOri g_)
+        -- Sum 1 to correct for the position in the case where there is only one gene in the genome
+        suf_size = if genomeSize x_ > 1 then suf_size_ else suf_size_ + 1
+        x_ = interleaveListToGenome (idxsToVector idxPairs) sign
+        (idx, x) = case ori of
+          LR ->
+            ( coerce $
+                (if inG == InG then gSize else hSize) - suf_size `div` 2 - genomeSize x + 1,
+              x_
+            )
+          RL -> (coerce $ suf_size `div` 2 + 1, invOri x_)
 
     -- Find minimum element of T'.
     -- Note: a first node is never chosen,
@@ -448,17 +457,16 @@ getGenome (Tmin ptype sign HSRoot {..}) =
     safeMinimum [] = Nothing
     safeMinimum l = Just $ List.minimumBy (\(_, a, _, _, _) (_, b, _, _, _) -> a `compare` b) l
 
-updateTmin :: Genome -> Genome -> GenomePosition -> Tmin -> Duo -> Tmin
-updateTmin g h gp (Tmin ptype sign root@HSRoot {..}) duo =
+-- | updateTmin with a new breakpoint, receives the pair of genomes, a genome position indicating the position of the duo representing the breakpoint (position of a genome with two elements), and the Tmin.
+updateTmin :: Genome -> Genome -> (Bool, GenomePosition) -> Tmin -> Tmin
+updateTmin g h (isDeletion, breakPos) (Tmin ptype sign root@HSRoot {..}) =
   Tmin ptype sign $ root {rChildren = map aux rChildren}
   where
-    (gidx, x, inG, ori) = case gp of
-      (G gidx _ ori) -> (gidx, g, InG, ori)
-      (H gidx _ ori) -> (gidx, h, InH, ori)
-    n = genomeSize g
-    bDist = 2 * (coerce n - prefSize) - 1
-    prefSize = gidx + duoIdx duo - 1
-    v = interleaveListRepresentation x
+    (prefSize, k, inG, ori, n) = case breakPos of
+      (G gidx _ ori) -> (gidx, g, InG, ori, genomeSize g)
+      (H gidx _ ori) -> (gidx, h, InH, ori, genomeSize h)
+    bDist = 2 * (coerce n - prefSize) - (if isDeletion then 0 else 1)
+    v = interleaveListRepresentation k
     sufMap = suffixMap v . take (coerce prefSize) . evens $ [0 ..]
 
     -- search suffixes in each subtree of root
@@ -504,7 +512,16 @@ updateTmin g h gp (Tmin ptype sign root@HSRoot {..}) duo =
 data IdxPair = IdxPair (Vector ByteString) !Int !Int
 
 instance Show IdxPair where
-  show idxPair = show $ ipSlice idxPair
+  show idxPair =
+    " ["
+      ++ ( List.intercalate ", "
+             . map (\p -> let sp = BS.unpack p in (if tail sp == show (maxBound :: Int) then head sp : "inf" else sp))
+             . Vec.toList
+             $ ipSlice idxPair
+         )
+      ++ "]"
+
+-- show idxPair = List.intercalate ", " . map (\p -> let sp = show p in (if tail sp == show (maxBound :: Int) then head sp : "inf" else sp) $ ipSlice idxPair
 
 instance Eq IdxPair where
   (IdxPair _ lidx1 ridx1) == (IdxPair _ lidx2 ridx2) = lidx1 == lidx1 && ridx2 == ridx2
@@ -561,8 +578,8 @@ suffixMap v = List.foldl' step Map.empty
         else Map.alter (f (suf_idx + 1)) (v ! suf_idx) m
     f i Nothing = Just [i]
     f i (Just is) = Just (i : is)
--- ^ Remove a prefix of all suffixes from the map. The boolean indicates whether there is no suffixes with the given prefix.
 
+-- | Remove a prefix of all suffixes from the map. The boolean indicates whether there is no suffixes with the given prefix.
 moveSuffixMap :: Vector ByteString -> IdxPair -> Map ByteString [Int] -> (Map ByteString [Int], Bool)
 moveSuffixMap v pref m = (sufMap', null sufs)
   where

@@ -66,13 +66,12 @@ data Partition = Partition {partType :: PartitionType, gseq :: Seq Genome, hseq 
 makePartialPartition :: PartitionType -> Genome -> Genome -> Partition
 makePartialPartition ptype g h = Partition ptype (pure g) (pure h) mempty mempty
 
--- | Recives: a partition, a duo correspondent to a new breakpoint, and
---     an indication of the original genome and index of an occurrence
---     of a genome containing the breakpoint
---     Returns: a partition with the new breakpoint
-addBreakpoint :: Partition -> Duo -> GenomePosition -> Partition
-addBreakpoint part duo gp =
-  case gp of
+-- | Recives: a partition and an indication of the original genome and
+-- index of an occurrence of a duo containing the breakpoint
+--   Returns: a partition with the new breakpoint
+addBreakpoint :: Partition -> GenomePosition -> Partition
+addBreakpoint part duoPos =
+  case duoPos of
     (G idx _ _) ->
       let (gseq', gbps') = aux (gseq part) (gbps part) idx
        in part {gseq = gseq', gbps = gbps'}
@@ -85,10 +84,14 @@ addBreakpoint part duo gp =
       where
         (kseq_front, x, kseq_back, kbps_front, kbps_back, idx') = go Seq.Empty kseq Seq.Empty kbps idx
 
-        (ir, xl, xr) = breakGenome x (duoIdx duo + idx' - 1)
-        kseq' = kseq_front <> (xl :<| xr :<| kseq_back)
-        kbps' = kbps_front <> (assert (ir == duoIr duo) ir :<| kbps_back)
+        (ir, xl, xr) = breakGenome x idx'
+        kseq' = if idx' == 0 then kseq else kseq_front <> (xl :<| xr :<| kseq_back)
+        kbps' = if idx' == 0 then kbps else kbps_front <> (ir :<| kbps_back)
 
+        -- Go through the elements of the genome sequence until it finds the genome that must
+        -- be broken. Returns the first part of the sequence, the genome to be broken, the last
+        -- part of the sequence, the two parts of the intergenic region sequence, and an index
+        -- indicating where the genome must be broken.
         go ::
           Seq Genome ->
           Seq Genome ->
@@ -98,7 +101,7 @@ addBreakpoint part duo gp =
           (Seq Genome, Genome, Seq Genome, Seq IR, Seq IR, Idx)
         go ys (x :<| xs) ybs xbss@(xb :<| xbs) idx' =
           let size = coerce (genomeSize x)
-           in if idx' > size
+           in if idx' >= size
                 then go (ys :|> x) xs (ybs :|> xb) xbs (idx' - size)
                 else (ys, x, xs, ybs, xbss, idx')
         go ys (x :<| xs) ybs xbss idx' = (ys, x, xs, ybs, xbss, idx')
@@ -106,22 +109,46 @@ addBreakpoint part duo gp =
 
 -- | 2k-approximation for the intergenic partition problem
 getPartition :: PartitionType -> Genome -> Genome -> Partition
-getPartition ptype g h = go (makePartialPartition ptype g h) tmin0 breaks0
+getPartition ptype g h = getPartition_ (makePartialPartition ptype g h) update ptype g h
+    where update part _ breaksPos = foldl addBreakpoint part (map snd breaksPos)
+
+listGenomes :: PartitionType -> Genome -> Genome -> [Genome]
+listGenomes = getPartition_ [] update
+    where update l x _ = x : l
+
+getPartition_ :: forall a. a -> (a -> Genome -> [(Bool,GenomePosition)] -> a) -> PartitionType -> Genome -> Genome -> a
+getPartition_ acc0 updateAcc ptype g h = go acc0 tmin0 breaks0
   where
     tmin0 = makeTmin ptype g h
     breaks0 = Breaks ptype HashSet.empty
-    go :: Partition -> Tmin -> Breaks -> Partition
-    go part tmin breaks =
+    go :: a -> Tmin -> Breaks -> a
+    go acc tmin breaks =
       case getGenome tmin of
-        Nothing -> part
-        Just (x, gp) -> case ptype of
-          MCISP -> assert (tmin' /= tmin) $ go part' tmin' breaks'
-          RMCISP -> assert (tmin'' /= tmin) $ go part' tmin'' breaks'
+        Nothing -> acc
+        Just (x, gp) -> assert (tmin' /= tmin) $ go acc' tmin' breaks'
           where
-            (break, breaks') = getBreak breaks x
-            tmin' = updateTmin g h gp tmin break
-            tmin'' = updateTmin (invOri g) (invOri h) (invOri gp) tmin' (invOri break)
-            part' = addBreakpoint part break gp
+            tmin' =
+              -- ( if genomeSize x == 1
+              --     then deleteGene gp x
+              --     else id
+              -- )
+              case ptype of
+                MCISP -> tmin1
+                RMCISP -> tmin2
+            (breaksPos, breaks') = getBreak g h gp breaks x
+            tmin1 = foldr (updateTmin g h) tmin breaksPos
+            tmin2 =
+              foldr
+                ( updateTmin (invOri g) (invOri h)
+                    . ( \(isDel, gp) ->
+                          if genomeSize x == 1
+                            then (not isDel, invOri gp)
+                            else (isDel, invOri gp)
+                      )
+                )
+                tmin1
+                breaksPos
+            acc' = updateAcc acc x breaksPos
 
 -- | A partition (s,p) is valid if
 --  it is possible to rearrange s to obtain p
@@ -134,6 +161,8 @@ breakpoints part = (gbps part, hbps part)
 blocks :: Partition -> (Seq Genome, Seq Genome)
 blocks part = (gseq part, hseq part)
 
+-- | Converts a partition into a pair of genomes representing the reduced genomes
+-- correspondent to the partition
 reduced :: Partition -> (Genome, Genome)
 reduced part = (gr, hr)
   where
@@ -148,7 +177,7 @@ reduced part = (gr, hr)
 
     genomesToGenes = map genomeToGene . toList
     genomeToGene g = fromMaybe (error "Error on reduced.") $ gmLookup g m
-    m = fst $ foldl addGenome (gmEmptyX, 1 :: Gene) hhs
+    m = fst $ foldl addGenome (gmEmptyX, 1 :: Gene) (hhs Seq.>< ggs)
     addGenome (m, count) g = (m', count')
       where
         count' = if keepOld then count else count + 1
@@ -169,22 +198,6 @@ cost = length . fst . breakpoints
 --           RMCISP -> subGenCount x g + subGenCount (invOri x) g
 --     (bls1, bls2) = blocks part
 
-listGenomes :: PartitionType -> Genome -> Genome -> [Genome]
-listGenomes ptype g h = go [] tmin0 breaks0
-  where
-    tmin0 = makeTmin ptype g h
-    breaks0 = Breaks ptype HashSet.empty
-    go :: [Genome] -> Tmin -> Breaks -> [Genome]
-    go acc tmin breaks =
-      case getGenome tmin of
-        Nothing -> acc
-        Just (x, gp) -> go acc' tmin'' breaks'
-          where
-            (break, breaks') = getBreak breaks x
-            tmin' = updateTmin g h gp tmin break
-            tmin'' = updateTmin (invOri g) (invOri h) (invOri gp) tmin' (invOri break)
-            acc' = x : acc
-
 sizeTmin :: PartitionType -> Genome -> Genome -> Size
 sizeTmin ptype g h = Size . length $ listGenomes ptype g h
 
@@ -194,10 +207,32 @@ data Breaks = Breaks PartitionType (HashSet (Gene, Gene)) deriving (Show)
 isBreak :: Duo -> Breaks -> Bool
 isBreak duo (Breaks partType brks) = (genePair . canonicOri $ duo) `HashSet.member` brks
 
-getBreak :: Breaks -> Genome -> (Duo, Breaks)
-getBreak brks@(Breaks partType set) g =
-  case dropWhile (not . (`isBreak` brks)) ls of
-    [] -> (head ls, Breaks partType (HashSet.insert (genePair . canonicOri $ head ls) set))
-    (l : _) -> (l, brks)
+-- Position of the break that must be inserted, the Bool indicates whether the breakpoint
+-- is after a character that must be deleted
+getBreak :: Genome -> Genome -> GenomePosition -> Breaks -> Genome -> ([(Bool, GenomePosition)], Breaks)
+getBreak g h gp brks@(Breaks partType set) x =
+  if genomeSize x == 1
+    then case gp of
+      (G gidx _ ori) ->
+        let breaks_list = (\idx -> G idx (genomeSize g - 2) ori) <$> [gidx - 1, gidx]
+            duo1 = genePair . canonicOri $ duoByIdx g (gidx - 1)
+            duo2 = genePair . canonicOri $ duoByIdx g gidx
+         in ( zip [False, True] breaks_list,
+              Breaks partType (HashSet.insert duo2 (HashSet.insert duo1 set))
+            )
+      (H gidx _ ori) ->
+        let breaks_list = (\idx -> H idx (genomeSize h - 2) ori) <$> [gidx - 1, gidx]
+            duo1 = genePair . canonicOri $ duoByIdx h (gidx - 1)
+            duo2 = genePair . canonicOri $ duoByIdx h gidx
+         in ( zip [False, True] breaks_list,
+              Breaks partType (HashSet.insert duo2 (HashSet.insert duo1 set))
+            )
+    else (,brks') $ case gp of
+      (G gidx _ ori) -> [(False, G (gidx + didx - 1) (genomeSize g - 2) ori)]
+      (H gidx _ ori) -> [(False, H (gidx + didx - 1) (genomeSize h - 2) ori)]
   where
-    ls = duosList g
+    didx = duoIdx break
+    (break, brks') = case dropWhile (not . (`isBreak` brks)) ls of
+      [] -> (head ls, Breaks partType (HashSet.insert (genePair . canonicOri $ head ls) set))
+      (l : _) -> (l, brks)
+    ls = duosList x

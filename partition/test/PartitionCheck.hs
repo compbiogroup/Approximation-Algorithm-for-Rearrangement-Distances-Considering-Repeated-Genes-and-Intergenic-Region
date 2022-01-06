@@ -8,7 +8,7 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Coerce (coerce)
 import Data.Foldable (toList)
 import Genomes as G hiding (rearrangeGenome)
-import GenomesCheck (genGenome, rearrangeGenome)
+import GenomesCheck (genGenome, genGenomeWithSign, genSign, rearrangeGenome)
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
@@ -28,20 +28,31 @@ withTimeLimit timeout v = do
 genPartitionType :: Gen PartitionType
 genPartitionType = Gen.enumBounded
 
-genPartition :: Gen Partition
-genPartition = do
+genGenomes :: Gen (Genome, Genome, PartitionType)
+genGenomes = do
+  signed <- genSign
+  g <- genGenomeWithSign signed
+  h <- genGenomeWithSign signed
+  pt <- genPartitionType
+  return (g,h,pt)
+
+genBalancedGenomes :: Gen (Genome, Genome, PartitionType)
+genBalancedGenomes = do
   g <- genGenome
   h <- rearrangeGenome g
   pt <- genPartitionType
+  return (g,h,pt)
+
+genBalancedPartition :: Gen Partition
+genBalancedPartition = do
+  (g,h,pt) <- genBalancedGenomes
   return $ getPartition pt g h
 
 prop_partitionSequences :: Property
 prop_partitionSequences =
   property $ do
-    g <- forAll genGenome
-    h <- forAll (rearrangeGenome g)
-    pt <- forAll genPartitionType
-    part <- eval $ getPartition pt g h
+    (g,h,pt) <- forAll genGenomes
+    part <- test . withTimeLimit 1000000 . eval $ getPartition pt g h
     let (bps1, bps2) = breakpoints part
         (bls1, bls2) = blocks part
     combineGenomesL (toList bps1) (toList bls1) === g
@@ -50,15 +61,13 @@ prop_partitionSequences =
 prop_partitionIsValid :: Property
 prop_partitionIsValid =
   property $ do
-    part <- forAll genPartition
+    part <- forAll genBalancedPartition
     assert (validPartition part)
 
 prop_costIsSimetric :: Property
 prop_costIsSimetric =
   property $ do
-    g <- forAll genGenome
-    h <- forAll (rearrangeGenome g)
-    pt <- forAll genPartitionType
+    (g,h,pt) <- forAll genGenomes
     let partGH = getPartition pt g h
     let partHG = getPartition pt g h
     cost partGH === cost partHG
@@ -66,7 +75,7 @@ prop_costIsSimetric =
 prop_costIsCorrect :: Property
 prop_costIsCorrect =
   property $ do
-    part <- forAll genPartition
+    part <- forAll genBalancedPartition
     cost part === (subtract 1 . length . fst . blocks $ part)
 
 -- prop_makeTminIsCorrect :: Property
@@ -77,18 +86,14 @@ prop_costIsCorrect =
 prop_lowerBound :: Property
 prop_lowerBound =
   property $ do
-    g <- forAll genGenome
-    h <- forAll (rearrangeGenome g)
-    pt <- forAll genPartitionType
+    (g,h,pt) <- forAll genBalancedGenomes
     let part = getPartition pt g h
     assert $ coerce (sizeTmin pt g h) <= 2 * cost part
 
 prop_upperBound :: Property
 prop_upperBound =
   property $ do
-    g <- forAll genGenome
-    h <- forAll (rearrangeGenome g)
-    pt <- forAll genPartitionType
+    (g,h,pt) <- forAll genBalancedGenomes
     let part = getPartition pt g h
         k = occurenceMax g
     assert $ 2 * k * coerce (sizeTmin pt g h) >= 2 * cost part

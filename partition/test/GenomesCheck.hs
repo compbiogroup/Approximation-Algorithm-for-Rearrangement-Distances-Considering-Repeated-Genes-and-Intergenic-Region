@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module GenomesCheck (tests, genIR, genGenome, getSubGenome, GenomesCheck.rearrangeGenome) where
+module GenomesCheck (tests, genIR, genGenome, genGenomeWithSign, genSign, getSubGenome, GenomesCheck.rearrangeGenome) where
 
 import Control.Monad.Random (evalRandIO)
 import Control.Monad.Trans.Class (lift)
@@ -24,11 +24,15 @@ genIR = coerce <$> Gen.int (Range.linear 0 100)
 genSign :: Gen Sign
 genSign = Gen.enum Signed Unsigned
 
--- | Genereta a now empty genome
+-- | Generate an empty genome
 genGenome :: Gen Genome
 genGenome = do
-  size <- Gen.int (Range.linear 1 100)
   signed <- genSign
+  genGenomeWithSign signed
+
+genGenomeWithSign :: Sign -> Gen Genome
+genGenomeWithSign signed = do
+  size <- Gen.int (Range.linear 1 100)
   coins <- Gen.list (Range.singleton $ size - 1) Gen.bool
   ls <-
     ( case signed of

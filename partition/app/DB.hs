@@ -9,7 +9,7 @@ import Control.Monad.Random (Rand, StdGen, evalRandIO, getRandomR, getRandoms)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import Data.Coerce (coerce)
-import Data.List (unfoldr)
+import Data.List (sort, unfoldr)
 import Genomes
 import LocalBase
 import Options.Applicative
@@ -39,6 +39,8 @@ data Args = Args
     db_nop :: Int,
     db_porc :: Int,
     db_sign :: Sign,
+    db_indel :: Int,
+    db_zeros :: Bool,
     db_output :: String
   }
 
@@ -132,6 +134,18 @@ argParser =
             <> short 's'
             <> help "Whether the input Strings are signed."
         )
+      <*> option
+        auto
+        ( long "indel"
+            <> short 'd'
+            <> metavar "D"
+            <> help "How much indels to apply (D deletions follow by D insertions)."
+        )
+      <*> switch
+        ( long "zeros"
+            <> short 'z'
+            <> help "Whether to produce intergenic regions with zeros."
+        )
       <*> strOption
         ( long "outfile"
             <> short 'o'
@@ -151,18 +165,37 @@ main = do
 genPair :: Args -> Rand StdGen (ByteString, ByteString, ByteString, ByteString)
 genPair Args {..} = do
   g <- case db_par of
-    (DB1 (RepDB l h d)) -> randomGenomeWithReplicas db_size d l h db_sign
-    (DB2 (RandDB lim)) -> randomGenome db_size lim db_sign
+    (DB1 (RepDB l h d)) -> randomGenomeWithReplicas db_zeros db_size d l h db_sign
+    (DB2 (RandDB lim)) -> randomGenome db_zeros db_size lim db_sign
   h <-
-    if db_nop == -1
-      then rearrangeGenome g
-      else applyOperations g
+    applyIndels
+      =<< if db_nop == -1
+        then rearrangeGenome g
+        else applyOperations g
   let (s1, i1) = writeGenome True g
   let (s2, i2) = writeGenome True h
   return (s1, i1, s2, i2)
   where
     r_r = (db_nop * db_porc) `div` 100
     r_t = db_nop - r_r
+
+    applyIndels g = do
+      let dels = unfoldr dels_for_one db_indel
+      g' <- foldr (=<<) (return g) dels
+      let ins = unfoldr ins_for_one (db_indel, (+1) . (!! 1) . reverse . sort . alphabet $ g)
+      foldr (=<<) (return g') ins
+    dels_for_one 0 = Nothing
+    dels_for_one d = Just . (,d -1) $ \g -> do
+      i <- getRandomR (2 :: Idx, coerce $ genomeSize g - 1)
+      ir <- getRandomR (0, irByIdx g (i -1))
+      return $ deletion i (i + 1) ir g
+    ins_for_one (0,_) = Nothing
+    ins_for_one (d,next) = Just . (,(d-1,next+1)) $ \g -> do
+      i <- getRandomR (1 :: Idx, coerce $ genomeSize g - 1)
+      ir1 <- if db_zeros then return 0 else getRandomR (0, 100)
+      ir2 <- if db_zeros then return 0 else getRandomR (0, 100)
+      return $ insertion i (fromLists False (genomeIsSigned g) [coerce next] [ir1,ir2]) g
+
     applyOperations :: Genome -> Rand StdGen Genome
     applyOperations g = do
       coins <- getRandoms

@@ -12,7 +12,7 @@ module MCISP2K where
 import Control.Concurrent.ParallelIO.Global (parallel, stopGlobalPool)
 import Control.DeepSeq (force)
 import qualified Data.ByteString.Char8 as BS
-import Data.Time
+import Data.Time (diffUTCTime, getCurrentTime)
 import Genomes (Genome, Sign(..), readGenome, writeGenome)
 import LocalBase
 import Options.Applicative
