@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 -- |
 -- Module      : Genomes
@@ -190,6 +191,11 @@ instance Orientable Genome where
           . Vec.reverse
           . gstring
           $ g
+
+instance Orientable (Maybe Genome) where
+    getOri Nothing = LR
+    getOri (Just x) = getOri x
+    invOri = fmap invOri
 
 --------------------------------
 --      Random Generation     --

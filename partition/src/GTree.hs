@@ -24,7 +24,7 @@ module GTree
   )
 where
 
-import Control.Arrow (first, second)
+import Control.Arrow (second)
 import Control.Exception (assert)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as BS
@@ -64,6 +64,11 @@ instance Orientable GenomePosition where
   invOri (G idx remSize RL) = G (coerce remSize - idx + 2) remSize LR
   invOri (H idx remSize LR) = H (coerce remSize - idx + 2) remSize RL
   invOri (H idx remSize RL) = H (coerce remSize - idx + 2) remSize LR
+
+instance Orientable (Maybe GenomePosition) where
+    getOri Nothing = LR
+    getOri (Just gp) = getOri gp
+    invOri = fmap invOri
 
 -- | Tmin is the minimal set of set T, where
 --  T is the set of genomes with different
@@ -427,8 +432,6 @@ getGenome (Tmin ptype sign HSRoot {..}) =
           RL -> (coerce $ suf_size `div` 2 + 1, invOri x_)
 
     -- Find minimum element of T'.
-    -- Note: a first node is never chosen,
-    -- because it can not have a breakpoint (so is never unbalanced)
     walkDown :: SearchDownInfo -> HSSubTree -> Maybe ([IdxPair], Size, Size, IsInG, Ori)
     walkDown gd@SearchDown {..} currentNode =
       let (Tree.Node HSLabel {..} children) = currentNode
@@ -457,24 +460,54 @@ getGenome (Tmin ptype sign HSRoot {..}) =
     safeMinimum [] = Nothing
     safeMinimum l = Just $ List.minimumBy (\(_, a, _, _, _) (_, b, _, _, _) -> a `compare` b) l
 
+-- | Aditional step when updating Tmin if the update is the deletion of a gene.
+deleteGene :: GenomePosition -> Genome -> Tmin -> Tmin
+deleteGene gp x (Tmin ptype sign root@HSRoot {..}) =
+  Tmin ptype sign $ root {rChildren = map aux rChildren}
+  where
+    v = interleaveListRepresentation x
+    aux t@(Tree.Node l@HSLabel {..} children) =
+      if not (IdxPair v 0 (Vec.length v) `ipIsPrefixOf` hsPref)
+        then t
+        else case hsInfo of
+          info@LeafInfo {..} -> Tree.Node l {hsInfo = hsInfo {available = False}} children
+          info@NodeInfo {..} ->
+            case gp of
+              G {} -> Tree.Node l {hsInfo = hsInfo {sumG = sumG}} children
+              H {} -> Tree.Node l {hsInfo = hsInfo {sumH = sumH}} children
+
 -- | updateTmin with a new breakpoint, receives the pair of genomes, a genome position indicating the position of the duo representing the breakpoint (position of a genome with two elements), and the Tmin.
-updateTmin :: Genome -> Genome -> (Bool, GenomePosition) -> Tmin -> Tmin
-updateTmin g h (isDeletion, breakPos) (Tmin ptype sign root@HSRoot {..}) =
+updateTmin :: Genome -> Genome -> (Maybe Genome, GenomePosition) -> Tmin -> Tmin
+updateTmin g h (delM, breakPos) (Tmin ptype sign root@HSRoot {..}) =
   Tmin ptype sign $ root {rChildren = map aux rChildren}
   where
     (prefSize, k, inG, ori, n) = case breakPos of
       (G gidx _ ori) -> (gidx, g, InG, ori, genomeSize g)
       (H gidx _ ori) -> (gidx, h, InH, ori, genomeSize h)
-    bDist = 2 * (coerce n - prefSize) - (if isDeletion then 0 else 1)
+    bDist = 2 * (coerce n - prefSize) - 1
     v = interleaveListRepresentation k
     sufMap = suffixMap v . take (coerce prefSize) . evens $ [0 ..]
+    vdelM = (\v -> IdxPair v 0 (Vec.length v)) . interleaveListRepresentation <$> delM
 
     -- search suffixes in each subtree of root
     -- Note: a first node never have a breakpoint
     aux t@(Tree.Node l@HSLabel {..} children) =
-      if notFound
-        then t
-        else snd . go (makeUpdateInfo sufMap' v) $ t
+      ( case vdelM of
+          Just idxPairX -> \t'@(Tree.Node l'@HSLabel {..} children') ->
+            -- In the case of a deletion we must decrement one child of the root
+            if not (idxPairX `ipIsPrefixOf` hsPref)
+              then t'
+              else case hsInfo of
+                info@LeafInfo {..} -> Tree.Node l' {hsInfo = hsInfo {available = False}} children'
+                info@NodeInfo {..} ->
+                  case breakPos of
+                    G {} -> Tree.Node l' {hsInfo = hsInfo {sumG = sumG - 1}} children'
+                    H {} -> Tree.Node l' {hsInfo = hsInfo {sumH = sumH - 1}} children'
+          Nothing -> id
+      )
+        $ if notFound
+          then t
+          else snd . go (makeUpdateInfo sufMap' v) $ t
       where
         (sufMap', notFound) = moveSuffixMap v hsPref sufMap
 
