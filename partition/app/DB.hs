@@ -187,13 +187,13 @@ genPair Args {..} = do
     dels_for_one 0 = Nothing
     dels_for_one d = Just . (,d -1) $ \g -> do
       i <- getRandomR (2 :: Idx, coerce $ genomeSize g - 1)
-      ir <- getRandomR (0, irByIdx g (i -1))
+      ir <- getRandomR (0, irByIdx g (i -1) + irByIdx g i)
       return $ deletion i (i + 1) ir g
     ins_for_one (0,_) = Nothing
     ins_for_one (d,next) = Just . (,(d-1,next+1)) $ \g -> do
       i <- getRandomR (1 :: Idx, coerce $ genomeSize g - 1)
       ir1 <- if db_zeros then return 0 else getRandomR (0, 100)
-      ir2 <- if db_zeros then return 0 else getRandomR (0, 100)
+      ir2 <- if db_zeros then return 0 else getRandomR (max 0 (irByIdx g i - ir1), 100)
       return $ insertion i (fromLists False (genomeIsSigned g) [coerce next] [ir1,ir2]) g
 
     applyOperations :: Genome -> Rand StdGen Genome
