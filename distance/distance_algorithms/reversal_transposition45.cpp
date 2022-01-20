@@ -113,7 +113,7 @@ int two_overcharged(Permutation &pi, vector<int> breaks, vector<int> overcharged
       c = pi.get_ir(k);
 
       x = pi.get_ir_target(min(pi[ob0], pi[ob0 + 1]) + 1);
-      y = pi.get_ir_target(max(pi[ob1], pi[ob1 + 1]) + 1);
+      y = pi.get_ir_target(min(pi[ob1], pi[ob1 + 1]) + 1);
       z = c + (a - x) + (b - y);
 
       transposition_move(pi, i, j, k, x, y, z);
