@@ -45,7 +45,7 @@ struct Genomes {
   unique_ptr<Genome> h;
 };
 
-Genomes generate_genomes(size_t n, bool add_sign) {
+Genomes generate_genomes(size_t n, bool add_sign, bool add_indels) {
   string sg, ig, sh, ih;
   int ir;
   int sum = 0;
@@ -104,19 +104,40 @@ Genomes generate_genomes(size_t n, bool add_sign) {
 
   gs.g = unique_ptr<Genome>(new Genome(sg, ig, false));
   gs.h = unique_ptr<Genome>(new Genome(sh, ih, false));
+
+  if (add_indels) {
+      for (int i = 2; i < int(gs.g->size()); i++) {
+        if(rand() % 100 < 10) {
+            IR x = rand() % (gs.g->get_ir(i - 1) + gs.g->get_ir(i) + 1);
+            gs.g->deletion(i,i+1,x);
+            i--;
+        }
+      }
+
+      for (int i = 2; i < int(gs.h->size()); i++) {
+        if(rand() % 100 < 10) {
+            IR x = rand() % (gs.h->get_ir(i - 1) + gs.h->get_ir(i) + 1);
+            gs.h->deletion(i,i+1,x);
+            i--;
+        }
+      }
+      /* cout << "g: " << *gs.g << endl; */
+      /* cout << "h: " << *gs.h << endl; */
+  }
+
   return gs;
 }
 
 void generate(size_t n, TestPerm &t_perm) {
   bool add_sign;
   generate(n, add_sign);
-  Genomes gs = generate_genomes(n, add_sign);
+  Genomes gs = generate_genomes(n, add_sign, false);
   t_perm.perm =
       unique_ptr<Permutation>(new Permutation(*gs.g, *gs.h, add_sign));
 }
 
 void generate(size_t n, TestCycleGraph &t_cg) {
-  Genomes gs = generate_genomes(n, true);
+  Genomes gs = generate_genomes(n, true, true);
   t_cg.cg = unique_ptr<CycleGraph>(new CycleGraph(*gs.g, *gs.h));
 }
 

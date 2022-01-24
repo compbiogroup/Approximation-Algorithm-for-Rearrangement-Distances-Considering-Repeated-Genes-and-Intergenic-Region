@@ -22,9 +22,9 @@ InputData input(string &line1, string &line2, string &line3, string &line4, bool
 
   data.g = new Genome(line1, line2, extend);
   data.h = new Genome(line3, line4, extend);
-  if (data.g->size() != data.h->size()) {
-    throw invalid_argument("Size of genomes differ");
-  }
+  /* if (data.g->size() != data.h->size()) { */
+    /* throw invalid_argument("Size of genomes differ"); */
+  /* } */
 
   return data;
 }
@@ -44,20 +44,20 @@ void output(ostream &os, const CycleGraph &cyc_dec, double time) {
 }
 
 void output(ostream &os, PermsIrs perms_irs) {
-    for (size_t i = 0; i < perms_irs.n - 1; i++) {
+    for (size_t i = 0; i < perms_irs.s_n - 1; i++) {
         os << perms_irs.s[i] << " ";
     }
-    os << perms_irs.s[perms_irs.n - 1] << endl;
-    for (size_t i = 0; i < perms_irs.n - 2; i++) {
+    os << perms_irs.s[perms_irs.s_n - 1] << endl;
+    for (size_t i = 0; i < perms_irs.s_n - 2; i++) {
         os << perms_irs.s_ir[i] << " ";
     }
-    os << perms_irs.s_ir[perms_irs.n - 2] << endl;
-    for (size_t i = 0; i < perms_irs.n - 1; i++) {
+    os << perms_irs.s_ir[perms_irs.s_n - 2] << endl;
+    for (size_t i = 0; i < perms_irs.p_n - 1; i++) {
         os << perms_irs.p[i] << " ";
     }
-    os << perms_irs.p[perms_irs.n - 1] << endl;
-    for (size_t i = 0; i < perms_irs.n - 2; i++) {
+    os << perms_irs.p[perms_irs.p_n - 1] << endl;
+    for (size_t i = 0; i < perms_irs.p_n - 2; i++) {
         os << perms_irs.p_ir[i] << " ";
     }
-    os << perms_irs.p_ir[perms_irs.n - 2] << endl;
+    os << perms_irs.p_ir[perms_irs.p_n - 2] << endl;
 }

@@ -1,7 +1,6 @@
 #include "cycles.hpp"
 #include "../misc/genome.hpp"
 #include "../misc/io.hpp"
-#include "greedy-dup-cycles.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
@@ -9,11 +8,39 @@
 #include <queue>
 #include <sstream>
 
-/* Helper function to find the edges */
-void fill_edges(Genome &s1, Genome &s2, vector<Vertex> &vec) {}
-
 CycleGraph::CycleGraph(const Genome &origin, const Genome &target)
-    : vertices(2 * (origin.size() + target.size()) - 4), cycles() {
+    : vertices(2 * (origin.size() + target.size()) - 4), cycles(),
+      indel_count() {
+
+  int a = max(origin.size(), target.size());
+  int b = max(origin.get_op_max(), target.get_op_max());
+  op_max = max(a, b) + 1;
+  fhs = 2 * origin.size() -
+        2; // number of vertices correspondent to genes of the origin genome
+
+  /* Using gene values to label the vertices, also indicate how to update indels
+   * of each vertice */
+  vertices[0].gene_val = origin[1];
+  vertices[0].indel_update = -1;
+  for (size_t i = 2; i < origin.size(); ++i) {
+    vertices[2 * i - 3].gene_val = origin[i];
+    vertices[2 * i - 3].indel_update = -1;
+    vertices[2 * i - 2].gene_val = origin[i];
+    vertices[2 * i - 2].indel_update = -1;
+  }
+  vertices[fhs - 1].gene_val = origin[origin.size()];
+  vertices[fhs - 1].indel_update = -1;
+  vertices[fhs].gene_val = target[1];
+  vertices[fhs].indel_update = 1;
+  for (size_t i = 2; i < target.size(); ++i) {
+    vertices[fhs + 2 * i - 3].gene_val = target[i];
+    vertices[fhs + 2 * i - 3].indel_update = 1;
+    vertices[fhs + 2 * i - 2].gene_val = target[i];
+    vertices[fhs + 2 * i - 2].indel_update = 1;
+  }
+  vertices[vertices.size() - 1].gene_val = target[target.size()];
+  vertices[vertices.size() - 1].indel_update = -1;
+
   /* Black Edges */
   for (size_t i = 0; i < vertices.size(); ++i) {
     if (i % 2 == 0) {
@@ -23,7 +50,18 @@ CycleGraph::CycleGraph(const Genome &origin, const Genome &target)
     }
   }
 
-  int fhs = vertices.size() / 2; // size of first half of the vertices;
+  /* Indel Edges */
+  for (size_t i = 2; i < origin.size(); ++i) {
+    indel_count[abs(origin[i])]++;
+    vertices[2 * i - 3].indel = 2 * i - 2;
+    vertices[2 * i - 2].indel = 2 * i - 3;
+  }
+
+  for (size_t i = 2; i < target.size(); ++i) {
+    indel_count[abs(target[i])]--;
+    vertices[fhs + 2 * i - 3].indel = fhs + 2 * i - 2;
+    vertices[fhs + 2 * i - 2].indel = fhs + 2 * i - 3;
+  }
 
   /* Weigths */
   vertices[0].weigth = origin.get_ir(1);
@@ -110,7 +148,7 @@ void CycleGraph::bfs(Vtx_id start, bool is_random) {
   if (vertices[start].in_cycle)
     return;
 
-  q1.push_back(unique_ptr<QEntry>(new QEntry(start)));
+  q1.push_back(unique_ptr<QEntry>(new QEntry(start, this->indel_count)));
   vizited_in_level.insert(start);
 
   do {
@@ -118,17 +156,33 @@ void CycleGraph::bfs(Vtx_id start, bool is_random) {
     pos++;
 
     Vtx_id v = vertices[entry->vtx].black;
+
+    /* Follow indel edge */
+    if (vertices[v].fix_gray == NO_EDGE &&
+        !vertices[vertices[v].indel].in_cycle) {
+      Vtx_id u = vertices[v].indel;
+      if (vizited_in_level.find(u) == vizited_in_level.end() &&
+          entry->vizited.find(u) == entry->vizited.end()) {
+        q2.push_back(unique_ptr<QEntry>(new QEntry(
+            v, u, entry->fixed, entry->vizited, entry->indel_count)));
+        q2.back()->indel_count[vertices[u].gene_val] +=
+            vertices[u].indel_update;
+        vizited_in_level.insert(u);
+      }
+    }
+
+    /* Follow each gray edge */
     vector<Vtx_id> neigs;
-    if (vertices[v].fix_gray != -1) {
+    if (vertices[v].fix_gray != NO_EDGE) {
       neigs.push_back(vertices[v].fix_gray);
-    } else {
+    } else if (!vertices[v].is_indel) {
       auto vu = entry->fixed.find(v);
       if (vu != entry->fixed.end()) {
         neigs.push_back(vu->second);
       } else {
         for (auto u : vertices[v].grays) {
           if (entry->fixed.find(u) == entry->fixed.end() &&
-              vertices[u].fix_gray == -1) {
+              vertices[u].fix_gray == NO_EDGE) {
             neigs.push_back(u);
           }
         }
@@ -137,33 +191,34 @@ void CycleGraph::bfs(Vtx_id start, bool is_random) {
 
     vector<Vtx_id> notDone;
     for (Vtx_id u : neigs) {
-      if (vizited_in_level.find(u) == vizited_in_level.end() &&
+      if (!vertices[u].in_cycle &&
+          vizited_in_level.find(u) == vizited_in_level.end() &&
           entry->vizited.find(u) == entry->vizited.end()) {
         notDone.push_back(u);
       }
     }
 
-    if (vertices[v].fix_gray == -1) {
+    if (vertices[v].fix_gray == NO_EDGE) {
       for (Vtx_id u : notDone) {
-        if ((v % (vertices.size() / 2)) % 2 == 1) {
+        if ((v % fhs) % 2 == 1) {
           headtailcorresp_v = v + 1;
         } else {
           headtailcorresp_v = v - 1;
         }
-        if ((u % (vertices.size() / 2)) % 2 == 1) {
+        if ((u % fhs) % 2 == 1) {
           headtailcorresp_u = u + 1;
         } else {
           headtailcorresp_u = u - 1;
         }
         q2.push_back(unique_ptr<QEntry>(
             new QEntry(v, u, headtailcorresp_v, headtailcorresp_u, entry->fixed,
-                       entry->vizited)));
+                       entry->vizited, entry->indel_count)));
         vizited_in_level.insert(u);
       }
     } else {
       for (Vtx_id u : notDone) {
-        q2.push_back(
-            unique_ptr<QEntry>(new QEntry(v, u, entry->fixed, entry->vizited)));
+        q2.push_back(unique_ptr<QEntry>(new QEntry(
+            v, u, entry->fixed, entry->vizited, entry->indel_count)));
         vizited_in_level.insert(u);
       }
     }
@@ -185,29 +240,31 @@ void CycleGraph::bfs(Vtx_id start, bool is_random) {
   /* Find balanced cycle in level if it exists */
   vector<Vtx_id> cycle;
   bool ok = false;
-  for (;pos < q1.size(); pos++) {
-      if (q1[pos]->vtx == start) {
-          entry = move(q1[pos]);
-          cycle.clear();
-          Vtx_id u, v;
-          int weigth = 0;
-          v = start;
-          do {
-            weigth += vertices[v].weigth;
-            u = vertices[v].black;
-            cycle.push_back(v);
-            cycle.push_back(u);
-            v = entry->fixed[u];
-          } while (v != start);
-          if (weigth == 0) {
-              ok = true;
-              add_cycle(cycle);
-              break;
-          }
+  for (; pos < q1.size(); pos++) {
+    if (q1[pos]->vtx == start) {
+      entry = move(q1[pos]);
+      cycle.clear();
+      Vtx_id u, v;
+      int weigth = 0;
+      v = start;
+      do {
+        u = vertices[v].black;
+        cycle.push_back(v);
+        cycle.push_back(u);
+        v = entry->fixed[u];
+        if (v != vertices[u].indel) {
+          weigth += vertices[v].weigth;
+        }
+      } while (v != start);
+      if (weigth == 0) {
+        ok = true;
+        add_cycle(cycle);
+        break;
       }
+    }
   }
   if (!ok) {
-      add_cycle(cycle);
+    add_cycle(cycle);
   }
 }
 
@@ -220,12 +277,12 @@ string CycleGraph::show_cycles() const {
     ss << '[' << v;
     v = vertices[v].black;
     ss << "," << v;
-    v = vertices[v].fix_gray;
+    v = vertices[v].is_indel ? vertices[v].indel : vertices[v].fix_gray;
     while (v != cycles[i].second) {
       ss << "," << v;
       v = vertices[v].black;
       ss << "," << v;
-      v = vertices[v].fix_gray;
+      v = vertices[v].is_indel ? vertices[v].indel : vertices[v].fix_gray;
     }
     ss << ']';
     if (i != cycles.size() - 1)
@@ -267,48 +324,96 @@ void CycleGraph::read_cycles(string str) {
 }
 
 PermsIrs CycleGraph::get_perms() {
-  size_t n = (size() - 4) / 4 + 2;
   PermsIrs perms_irs;
-  perms_irs.n = n;
-  perms_irs.s = (int *)malloc(n * sizeof(int));
-  perms_irs.s_ir = (int *)malloc((n - 1) * sizeof(int));
-  perms_irs.p = (int *)malloc(n * sizeof(int));
-  perms_irs.p_ir = (int *)malloc((n - 1) * sizeof(int));
+  perms_irs.s_n = (fhs + 2) / 2;
+  perms_irs.p_n = (vertices.size() - fhs + 2) / 2;
+  perms_irs.s = (int *)malloc(perms_irs.s_n * sizeof(int));
+  perms_irs.s_ir = (int *)malloc((perms_irs.s_n - 1) * sizeof(int));
+  perms_irs.p = (int *)malloc(perms_irs.p_n * sizeof(int));
+  perms_irs.p_ir = (int *)malloc((perms_irs.p_n - 1) * sizeof(int));
 
   /* The second permutation is the identity. */
-  for (size_t i = 0; i < n; ++i) {
-    perms_irs.p[i] = i;
+  for (size_t i = 0; i < perms_irs.p_n; ++i) {
+    perms_irs.p[i] = i + 1;
   }
 
   for (size_t i = 0; i < cycles.size(); ++i) {
     Vtx_id v = cycles[i].second;
     Vtx_id u = vertices[v].black;
+
+    while (vertices[u].is_indel) {
+      if (u < fhs) {
+        perms_irs.s[(u + 1) / 2] = 0;
+      } else {
+        perms_irs.p[(u - fhs + 1) / 2] = 0;
+      }
+      u = vertices[vertices[u].indel].black;
+    }
     v = vertices[u].fix_gray;
+
     Vtx_id a = min(v, u);
     Vtx_id b = max(v, u);
     if (vertices[a].sign_positive == vertices[b].sign_positive) {
-      perms_irs.s[(a + 1) / 2] = perms_irs.p[(b - size() / 2 + 1) / 2];
+      perms_irs.s[(a + 1) / 2] = perms_irs.p[(b - fhs + 1) / 2];
     } else {
-      perms_irs.s[(a + 1) / 2] = -perms_irs.p[(b - size() / 2 + 1) / 2];
+      perms_irs.s[(a + 1) / 2] = -perms_irs.p[(b - fhs + 1) / 2];
     }
     while (v != cycles[i].second) {
       u = vertices[v].black;
-      v = vertices[u].fix_gray;
-      Vtx_id a = min(v, u);
-      Vtx_id b = max(v, u);
-      if (vertices[a].sign_positive == vertices[b].sign_positive) {
-        perms_irs.s[(a + 1) / 2] =
-            perms_irs.p[(b - size() / 2 + 1) / 2];
+      if (vertices[u].is_indel) {
+        if (u < fhs) {
+          perms_irs.s[(u + 1) / 2] = 0;
+        } else {
+          perms_irs.p[(u - fhs + 1) / 2] = 0;
+        }
+        v = vertices[u].indel;
       } else {
-        perms_irs.s[(a + 1) / 2] =
-            -perms_irs.p[(b - size() / 2 + 1) / 2];
+        v = vertices[u].fix_gray;
+        Vtx_id a = min(v, u);
+        Vtx_id b = max(v, u);
+        if (vertices[a].sign_positive == vertices[b].sign_positive) {
+          perms_irs.s[(a + 1) / 2] = perms_irs.p[(b - fhs + 1) / 2];
+        } else {
+          perms_irs.s[(a + 1) / 2] = -perms_irs.p[(b - fhs + 1) / 2];
+        }
       }
     }
   }
 
-  for (size_t i = 1; i < n; ++i) {
-    perms_irs.s_ir[i-1] = vertices[2*i - 1].weigth;
-    perms_irs.p_ir[i-1] = vertices[vertices.size() / 2 + 2*i - 1].weigth;
+  /* Remove contiguous sequence of indels and mark weights */
+  size_t i = 1, j = 1, k = 1, l = 1;
+  for (; i < perms_irs.s_n || j < perms_irs.p_n;) {
+    if (i < perms_irs.s_n) {
+      perms_irs.s_ir[k - 1] = vertices[2 * i - 1].weigth;
+      perms_irs.s[k - 1] = perms_irs.s[i - 1];
+      k++;
+      i++;
+    }
+    if (j < perms_irs.p_n) {
+      perms_irs.p_ir[l - 1] = vertices[fhs + 2 * j - 1].weigth;
+      perms_irs.p[l - 1] = perms_irs.p[j - 1];
+      l++;
+      j++;
+    }
+    if (perms_irs.s[i - 2] == 0) {
+      while (i < perms_irs.s_n && perms_irs.s[i - 1] == 0)
+        i++;
+    }
+    if (perms_irs.p[j - 2] == 0) {
+      while (j < perms_irs.p_n && perms_irs.s[j - 1] == 0)
+        j++;
+    }
+  }
+  perms_irs.s[k - 1] = perms_irs.s[i - 1];
+  perms_irs.p[l - 1] = perms_irs.p[j - 1];
+  perms_irs.s_n = k;
+  perms_irs.p_n = l;
+
+  for (j = 0; j < perms_irs.p_n; ++j) {
+    if (perms_irs.p[j] == 0) {
+      perms_irs.p[j] = op_max;
+      op_max++;
+    }
   }
 
   return perms_irs;
@@ -316,18 +421,23 @@ PermsIrs CycleGraph::get_perms() {
 
 void CycleGraph::serialize(ostream &os) const {
   for (size_t i = 0; i < vertices.size(); ++i) {
-    os << i << "(" << vertices[i].black << "," << vertices[i].weigth << "," << vertices[i].in_cycle << "," << vertices[i].sign_positive << "|";
+    os << i << "(" << vertices[i].gene_val << "," << vertices[i].black << ","
+       << vertices[i].weigth << "," << vertices[i].in_cycle << ","
+       << vertices[i].sign_positive << "|";
     os << "[";
-    if (vertices[i].fix_gray == -1) {
+    if (vertices[i].is_indel) {
+      os << "!" << vertices[i].indel;
+    } else if (vertices[i].fix_gray == NO_EDGE) {
       for (auto gray : vertices[i].grays) {
         os << gray << ",";
       }
+      os << "!" << vertices[i].indel;
     } else {
       os << vertices[i].fix_gray;
     }
     os << "])"
        << " ";
-    if (i == (vertices.size() - 1) / 2)
+    if (int(i) == fhs - 1)
       os << endl;
   }
 }
@@ -341,7 +451,7 @@ void CycleGraph::rem_cycle(Vtx_id i) {
   Vtx_id headtailcorresp_v, headtailcorresp_u;
 
   if (cycle_weight(i) == 0) {
-      balanced_cycles--;
+    balanced_cycles--;
   }
   vector<Vtx_id> cycle = get_cycle(i);
 
@@ -350,27 +460,34 @@ void CycleGraph::rem_cycle(Vtx_id i) {
     Vtx_id v = cycle[i];
     assert(vertices[v].in_cycle);
     vertices[v].in_cycle = false;
-    if (i % 2 == 1 && vertices[v].grays.size() > 1) {
+    if (i % 2 == 1) {
       Vtx_id u = (i == cycle.size() - 1) ? cycle[0] : cycle[i + 1];
-      if ((v % (vertices.size() / 2)) % 2 == 1) {
-        headtailcorresp_v = v + 1;
-      } else {
-        headtailcorresp_v = v - 1;
-      }
-      if ((u % (vertices.size() / 2)) % 2 == 1) {
-        headtailcorresp_u = u + 1;
-      } else {
-        headtailcorresp_u = u - 1;
-      }
-      if (not vertices[headtailcorresp_v].in_cycle && not vertices[headtailcorresp_u].in_cycle) {
-        assert(vertices[v].fix_gray != -1);
-        assert(vertices[u].fix_gray != -1);
-        assert(vertices[headtailcorresp_v].fix_gray != -1);
-        assert(vertices[headtailcorresp_u].fix_gray != -1);
-        vertices[v].fix_gray = -1;
-        vertices[u].fix_gray = -1;
-        vertices[headtailcorresp_v].fix_gray = -1;
-        vertices[headtailcorresp_u].fix_gray = -1;
+      if (vertices[v].is_indel) {
+        vertices[v].is_indel = false;
+        vertices[u].is_indel = false;
+        this->indel_count[vertices[v].gene_val] -= vertices[v].indel_update;
+      } else if (vertices[v].grays.size() > 1) {
+        if ((v % fhs) % 2 == 1) {
+          headtailcorresp_v = v + 1;
+        } else {
+          headtailcorresp_v = v - 1;
+        }
+        if ((u % fhs) % 2 == 1) {
+          headtailcorresp_u = u + 1;
+        } else {
+          headtailcorresp_u = u - 1;
+        }
+        if (not vertices[headtailcorresp_v].in_cycle &&
+            not vertices[headtailcorresp_u].in_cycle) {
+          assert(vertices[v].fix_gray != NO_EDGE);
+          assert(vertices[u].fix_gray != NO_EDGE);
+          assert(vertices[headtailcorresp_v].fix_gray != NO_EDGE);
+          assert(vertices[headtailcorresp_u].fix_gray != NO_EDGE);
+          vertices[v].fix_gray = NO_EDGE;
+          vertices[u].fix_gray = NO_EDGE;
+          vertices[headtailcorresp_v].fix_gray = NO_EDGE;
+          vertices[headtailcorresp_u].fix_gray = NO_EDGE;
+        }
       }
     }
   }
@@ -385,10 +502,13 @@ bool CycleGraph::check_cycle(vector<Vtx_id> cycle) {
       return false;
     if (i % 2 == 1) {
       Vtx_id u = (i == cycle.size() - 1) ? cycle[0] : cycle[i + 1];
-      if (vertices[v].fix_gray != -1) {
+      if (vertices[v].is_indel) {
+        if (vertices[v].indel != u)
+          return false;
+      } else if (vertices[v].fix_gray != NO_EDGE) {
         if (vertices[v].fix_gray != u)
           return false;
-      } else if (vertices[u].fix_gray != -1) {
+      } else if (vertices[u].fix_gray != NO_EDGE) {
         return false;
       }
     }
@@ -404,30 +524,36 @@ void CycleGraph::add_cycle(vector<Vtx_id> cycle) {
     Vtx_id v = cycle[i];
     assert(not vertices[v].in_cycle);
     vertices[v].in_cycle = true;
-    if (i % 2 == 1 && vertices[v].fix_gray == -1) {
+    if (i % 2 == 1 && vertices[v].fix_gray == NO_EDGE) {
       Vtx_id u = (i == cycle.size() - 1) ? cycle[0] : cycle[i + 1];
-      assert(vertices[u].fix_gray == -1);
-      vertices[v].fix_gray = u;
-      vertices[u].fix_gray = v;
-      if ((v % (vertices.size() / 2)) % 2 == 1) {
-        headtailcorresp_v = v + 1;
+      if (u == vertices[v].indel) {
+        vertices[v].is_indel = true;
+        vertices[u].is_indel = true;
+        this->indel_count[vertices[v].gene_val] += vertices[v].indel_update;
       } else {
-        headtailcorresp_v = v - 1;
+        assert(vertices[u].fix_gray == NO_EDGE);
+        vertices[v].fix_gray = u;
+        vertices[u].fix_gray = v;
+        if ((v % fhs) % 2 == 1) {
+          headtailcorresp_v = v + 1;
+        } else {
+          headtailcorresp_v = v - 1;
+        }
+        if ((u % fhs) % 2 == 1) {
+          headtailcorresp_u = u + 1;
+        } else {
+          headtailcorresp_u = u - 1;
+        }
+        assert(vertices[headtailcorresp_u].fix_gray == NO_EDGE);
+        assert(vertices[headtailcorresp_v].fix_gray == NO_EDGE);
+        vertices[headtailcorresp_v].fix_gray = headtailcorresp_u;
+        vertices[headtailcorresp_u].fix_gray = headtailcorresp_v;
       }
-      if ((u % (vertices.size() / 2)) % 2 == 1) {
-        headtailcorresp_u = u + 1;
-      } else {
-        headtailcorresp_u = u - 1;
-      }
-      assert(vertices[headtailcorresp_u].fix_gray == -1);
-      assert(vertices[headtailcorresp_v].fix_gray == -1);
-      vertices[headtailcorresp_v].fix_gray = headtailcorresp_u;
-      vertices[headtailcorresp_u].fix_gray = headtailcorresp_v;
     }
   }
   cycles.push_back(pair<size_t, Vtx_id>(cycle.size(), cycle[0]));
   if (cycle_weight(cycle[0]) == 0) {
-      balanced_cycles++;
+    balanced_cycles++;
   }
 }
 
@@ -444,30 +570,30 @@ vector<Vtx_id> CycleGraph::get_cycle(Vtx_id i) const {
   cycle.push_back(v);
   v = vertices[v].black;
   cycle.push_back(v);
-  v = vertices[v].fix_gray;
+  v = vertices[v].is_indel ? vertices[v].indel : vertices[v].fix_gray;
   while (v != cycle[0]) {
     cycle.push_back(v);
     v = vertices[v].black;
     cycle.push_back(v);
-    v = vertices[v].fix_gray;
+    v = vertices[v].is_indel ? vertices[v].indel : vertices[v].fix_gray;
   }
 
   return cycle;
 }
 
 int CycleGraph::cycle_weight(Vtx_id i) const {
-  vector<Vtx_id> cycle;
   int weigth = 0;
 
   Vtx_id v = i;
-  weigth += vertices[v].weigth;
-  v = vertices[v].black;
-  v = vertices[v].fix_gray;
-  while (v != i) {
-    weigth += vertices[v].weigth;
+  do {
     v = vertices[v].black;
-    v = vertices[v].fix_gray;
-  }
+    if (vertices[v].is_indel) {
+      v = vertices[v].indel;
+    } else {
+      v = vertices[v].fix_gray;
+      weigth += vertices[v].weigth;
+    }
+  } while (v != i);
 
   return weigth;
 }

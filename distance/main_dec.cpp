@@ -19,7 +19,7 @@ struct Args {
   string heuristic;
   string input_file;
   string output_folder;
-  int iterations = 1;
+  int iterations = 100;
   bool extend = false;
   bool duplicate = false;
   bool all = false;
@@ -27,7 +27,7 @@ struct Args {
 
 void help(char *name) {
   cout << "usage: Find a cicle decomposition for the breakpoint graph formed "
-          "be the origin and target signed genome."
+          "by the origin and target signed genomes."
        << "\t" << name << " HEUR [OPTIONS]" << endl
        << endl
        << "positional arguments:" << endl
@@ -44,7 +44,7 @@ void help(char *name) {
        << "\t-o, --output OUTPUT     outpute folder (if not provided stdout is "
           "used)"
        << endl
-       << "\t-k, --iterations ITER   number of iterations (defaut 1)" << endl
+       << "\t-k, --iterations ITER   number of iterations (defaut 100)" << endl
        << endl
        << "\t-e, --extend            whether to extend the genomes before "
           "apply the algorithm"

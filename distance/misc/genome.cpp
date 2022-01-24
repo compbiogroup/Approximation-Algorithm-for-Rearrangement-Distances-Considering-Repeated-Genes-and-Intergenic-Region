@@ -54,11 +54,30 @@ int Genome::occ_max() const {
   return *max_element(count.begin(), count.end());
 }
 
+void Genome::deletion(Gene i, Gene j, IR x) {
+  assert(2 <= i);
+  assert(i < j);
+  assert(j <= int(size()));
+  assert(0 <= x &&
+         x <= (*intergenic_regions)[i - 2] + (*intergenic_regions)[j - 2]);
+
+  int k = i - 1, l = j - 1;
+  (*intergenic_regions)[i - 2] = x;
+  for (; l < int(size()) - 1; k++, l++) {
+    (*genes)[k] = (*genes)[l];
+    (*intergenic_regions)[k] = (*intergenic_regions)[l];
+  }
+  (*genes)[k] = (*genes)[l];
+  genes->resize(k+1);
+  intergenic_regions->resize(k);
+  record_positions();
+}
+
 void Genome::reversal(Gene i, Gene j, IR x, IR y) {
 
   assert(2 <= i);
   assert(i <= j);
-  assert(j < int(size()));
+  assert(j <= int(size()));
   assert(0 <= x && x <= (*intergenic_regions)[i - 2]);
   assert(0 <= y && y <= (*intergenic_regions)[j - 1]);
 

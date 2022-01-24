@@ -32,7 +32,7 @@ void help(char *name) {
        << endl
        << "positional arguments:" << endl
        << "\tALG                     the algorithm to use (transposition4, "
-          "reversal4, or "
+          "reversal4, reversal_transposition45, or "
           "the name of an executable in the external folder)"
        << endl
        << endl

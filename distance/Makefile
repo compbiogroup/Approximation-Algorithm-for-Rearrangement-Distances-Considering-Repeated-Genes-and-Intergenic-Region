@@ -13,6 +13,8 @@ debug:
 	mv build/dec .
 
 test:
+	cmake -H. -Bbuild -DCMAKE_BUILD_TYPE=Debug
+	cmake --build build
 	RC_PARAMS="max_size=100 verbose_progress=1" build/dist_test
 
 clean:

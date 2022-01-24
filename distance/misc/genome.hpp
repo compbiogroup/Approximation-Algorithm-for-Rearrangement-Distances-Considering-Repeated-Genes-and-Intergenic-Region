@@ -3,6 +3,7 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 typedef int Gene;
@@ -29,12 +30,16 @@ public:
   int occ_max() const;
   /* Get positions of a given label (read only). */
   vector<int> &pos(Gene label) const { return (*positions)[label]; }
+  /* Deletion operation */
+  void deletion(Gene, Gene, IR);
   /* Reversal operation */
   void reversal(Gene, Gene, IR, IR);
   /* Transposition operation */
   void transposition(Gene, Gene, Gene, IR, IR, IR);
   /* Pretty print genome */
   virtual void serialize(ostream &) const;
+  /* Get and set a value bigger then all the labels */
+  Gene get_op_max() const { return op_max; }
 };
 
 ostream &operator<<(ostream &os, const Genome &g);
