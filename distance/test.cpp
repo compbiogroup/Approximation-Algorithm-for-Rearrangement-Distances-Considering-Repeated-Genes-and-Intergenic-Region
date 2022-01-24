@@ -52,10 +52,6 @@ Genomes generate_genomes(size_t n, bool add_sign, bool add_indels) {
   bool positive;
   Genomes gs;
 
-  sg.append("0");
-  sg.append(" ");
-  sh.append("0");
-  sh.append(" ");
   ir = generateInRange(50, 100);
   ig.append(to_string(ir));
   ig.append(" ");
@@ -84,10 +80,6 @@ Genomes generate_genomes(size_t n, bool add_sign, bool add_indels) {
     sh.append(" ");
     sum += ir;
   }
-  sg.append("2");
-  sg.append(" ");
-  sh.append("2");
-  sh.append(" ");
 
   vector<int> ir_list;
   ir_list.push_back(0);
@@ -102,8 +94,8 @@ Genomes generate_genomes(size_t n, bool add_sign, bool add_indels) {
     ih.append(" ");
   }
 
-  gs.g = unique_ptr<Genome>(new Genome(sg, ig, false));
-  gs.h = unique_ptr<Genome>(new Genome(sh, ih, false));
+  gs.g = unique_ptr<Genome>(new Genome(sg, ig, true));
+  gs.h = unique_ptr<Genome>(new Genome(sh, ih, true));
 
   if (add_indels) {
       for (int i = 2; i < int(gs.g->size()); i++) {
@@ -121,9 +113,9 @@ Genomes generate_genomes(size_t n, bool add_sign, bool add_indels) {
             i--;
         }
       }
-      /* cout << "g: " << *gs.g << endl; */
-      /* cout << "h: " << *gs.h << endl; */
   }
+  /* cout << "g: " << *gs.g << endl; */
+  /* cout << "h: " << *gs.h << endl; */
 
   return gs;
 }

@@ -23,8 +23,8 @@ Permutation::Permutation(const Genome &g, const Genome &h, bool duplicate) {
   } else {
     genes.reset(new vector<Gene>(g.size()));
     intergenic_regions.reset(new vector<IR>(g.size() - 1));
-    intergenic_regions_target.reset(new vector<IR>(g.size() - 1));
-    op_max = h.size();
+    intergenic_regions_target.reset(new vector<IR>(h.size() - 1));
+    op_max = max(g.size(), h.size());
   }
 
   /* Add intergenic regions */
@@ -50,7 +50,7 @@ Permutation::Permutation(const Genome &g, const Genome &h, bool duplicate) {
   }
 
   /* Build vector mapping old to new labels */
-  unordered_map<Gene, vector<Gene>> labels(h[h.size()] + 1);
+  unordered_map<Gene, vector<Gene>> labels(h.get_op_max());
   for (size_t i = 0; i < h.size(); i++) {
     labels[abs(h[i + 1])].push_back((h[i + 1] >= 0) ? i : -i);
   }

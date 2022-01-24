@@ -7,7 +7,7 @@
 
 Genome::Genome(string str_g, string str_i, bool extend) {
   string token;
-  op_max = -1;
+  op_max = 1;
   genes.reset(new vector<Gene>());
   intergenic_regions.reset(new vector<IR>());
 
@@ -17,14 +17,14 @@ Genome::Genome(string str_g, string str_i, bool extend) {
   stringstream ssg(str_g);
   while (getline(ssg, token, ' ')) {
     Gene a = stoi(token);
-    genes->push_back(a);
+    genes->push_back((a<0) ? a-1 : a+1);
     if (abs(genes->back()) > op_max)
       op_max = abs(genes->back());
   }
   if (extend) {
-    genes->push_back(op_max + 1);
-    op_max++;
+    genes->push_back(1);
   }
+  op_max++;
 
   /* Read each intergenic regions. */
   stringstream ssi(str_i);
@@ -40,7 +40,7 @@ Genome::Genome(string str_g, string str_i, bool extend) {
 
 void Genome::record_positions() {
   /* Record list of positions for each label. */
-  positions.reset(new vector<vector<Gene>>(op_max + 1));
+  positions.reset(new vector<vector<Gene>>(op_max));
   for (size_t i = 0; i < genes->size(); ++i) {
     (*positions)[abs((*genes)[i])].push_back(i + 1);
   }
