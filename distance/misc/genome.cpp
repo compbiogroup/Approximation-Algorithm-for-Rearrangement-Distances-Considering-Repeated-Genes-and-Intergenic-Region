@@ -17,12 +17,16 @@ Genome::Genome(string str_g, string str_i, bool extend) {
   stringstream ssg(str_g);
   while (getline(ssg, token, ' ')) {
     Gene a = stoi(token);
-    genes->push_back((a<0) ? a-1 : a+1);
+    genes->push_back((a < 0) ? a - 1 : a + 1);
     if (abs(genes->back()) > op_max)
       op_max = abs(genes->back());
   }
   if (extend) {
     genes->push_back(1);
+  }
+  if (!extend) {
+    (*genes)[0] = 0;
+    genes->back() = 1;
   }
   op_max++;
 
@@ -68,7 +72,7 @@ void Genome::deletion(Gene i, Gene j, IR x) {
     (*intergenic_regions)[k] = (*intergenic_regions)[l];
   }
   (*genes)[k] = (*genes)[l];
-  genes->resize(k+1);
+  genes->resize(k + 1);
   intergenic_regions->resize(k);
   record_positions();
 }
