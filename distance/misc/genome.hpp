@@ -29,7 +29,7 @@ public:
   /* Get maximum occurrence */
   int occ_max() const;
   /* Get positions of a given label (read only). */
-  vector<int> &pos(Gene label) const { return (*positions)[label]; }
+  vector<int> &pos(Gene label) const;
   /* Deletion operation */
   void deletion(Gene, Gene, IR);
   /* Reversal operation */

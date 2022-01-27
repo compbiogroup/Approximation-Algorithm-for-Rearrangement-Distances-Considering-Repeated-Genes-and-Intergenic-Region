@@ -44,7 +44,7 @@ Genome::Genome(string str_g, string str_i, bool extend) {
 
 void Genome::record_positions() {
   /* Record list of positions for each label. */
-  positions.reset(new vector<vector<Gene>>(op_max));
+  positions.reset(new vector<vector<Gene>>(op_max+1));
   for (size_t i = 0; i < genes->size(); ++i) {
     (*positions)[abs((*genes)[i])].push_back(i + 1);
   }
@@ -56,6 +56,12 @@ int Genome::occ_max() const {
     count[abs((*this)[i])]++;
   }
   return *max_element(count.begin(), count.end());
+}
+
+vector<int> &Genome::pos(Gene label) const {
+    if (label >= positions->size())
+        return positions->back();
+    return (*positions)[label];
 }
 
 void Genome::deletion(Gene i, Gene j, IR x) {
