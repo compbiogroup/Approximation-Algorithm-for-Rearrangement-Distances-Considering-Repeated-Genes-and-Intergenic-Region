@@ -20,25 +20,25 @@ CycleGraph::CycleGraph(const Genome &origin, const Genome &target)
 
   /* Using gene values to label the vertices, also indicate how to update indels
    * of each vertice */
-  vertices[0].gene_val = origin[1];
+  vertices[0].gene_val = abs(origin[1]);
   vertices[0].indel_update = -1;
   for (size_t i = 2; i < origin.size(); ++i) {
-    vertices[2 * i - 3].gene_val = origin[i];
+    vertices[2 * i - 3].gene_val = abs(origin[i]);
     vertices[2 * i - 3].indel_update = -1;
-    vertices[2 * i - 2].gene_val = origin[i];
+    vertices[2 * i - 2].gene_val = abs(origin[i]);
     vertices[2 * i - 2].indel_update = -1;
   }
-  vertices[fhs - 1].gene_val = origin[origin.size()];
+  vertices[fhs - 1].gene_val = abs(origin[origin.size()]);
   vertices[fhs - 1].indel_update = -1;
-  vertices[fhs].gene_val = target[1];
+  vertices[fhs].gene_val = abs(target[1]);
   vertices[fhs].indel_update = 1;
   for (size_t i = 2; i < target.size(); ++i) {
-    vertices[fhs + 2 * i - 3].gene_val = target[i];
+    vertices[fhs + 2 * i - 3].gene_val = abs(target[i]);
     vertices[fhs + 2 * i - 3].indel_update = 1;
-    vertices[fhs + 2 * i - 2].gene_val = target[i];
+    vertices[fhs + 2 * i - 2].gene_val = abs(target[i]);
     vertices[fhs + 2 * i - 2].indel_update = 1;
   }
-  vertices[vertices.size() - 1].gene_val = target[target.size()];
+  vertices[vertices.size() - 1].gene_val = abs(target[target.size()]);
   vertices[vertices.size() - 1].indel_update = -1;
 
   /* Black Edges */
@@ -118,11 +118,11 @@ CycleGraph::CycleGraph(const Genome &origin, const Genome &target)
       }
     }
   }
-  for (size_t i = 0; i < vertices.size(); ++i) {
-    if (vertices[i].grays.size() == 1) {
-      vertices[i].fix_gray = vertices[i].grays[0];
-    }
-  }
+
+  vertices[0].fix_gray = vertices[0].grays[0];
+  vertices[fhs - 1].fix_gray = vertices[fhs - 1].grays[0];
+  vertices[fhs].fix_gray = vertices[fhs].grays[0];
+  vertices[vertices.size() - 1].fix_gray = vertices[vertices.size() - 1].grays[0];
 }
 
 /* Decompose the remaning graph using bfs */
@@ -161,7 +161,9 @@ void CycleGraph::bfs(Vtx_id start, bool is_random) {
     if (vertices[v].fix_gray == NO_EDGE &&
         !vertices[vertices[v].indel].in_cycle) {
       Vtx_id u = vertices[v].indel;
-      if (vizited_in_level.find(u) == vizited_in_level.end() &&
+      if (entry->indel_count[vertices[u].gene_val] * vertices[u].indel_update <
+              0 &&
+          vizited_in_level.find(u) == vizited_in_level.end() &&
           entry->vizited.find(u) == entry->vizited.end()) {
         q2.push_back(unique_ptr<QEntry>(new QEntry(
             v, u, entry->fixed, entry->vizited, entry->indel_count)));
@@ -433,7 +435,7 @@ void CycleGraph::serialize(ostream &os) const {
       }
       os << "!" << vertices[i].indel;
     } else {
-      os << vertices[i].fix_gray;
+      os << "*" << vertices[i].fix_gray;
     }
     os << "])"
        << " ";
