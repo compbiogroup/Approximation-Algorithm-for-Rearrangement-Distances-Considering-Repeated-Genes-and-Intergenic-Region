@@ -9,6 +9,7 @@
 -- Maintainer  : gabriel.gabrielhs@gmail.com
 module MCISP2K where
 
+import Balancer (reduceGenesForDeletion)
 import Control.Concurrent.ParallelIO.Global (parallel_, stopGlobalPool)
 import Control.DeepSeq (force)
 import qualified Data.ByteString.Char8 as BS
@@ -93,7 +94,8 @@ simplifyGenomes ptype signed (s1, i1, s2, i2) = (s1', i1', s2', i2')
   where
     (s1', i1') = writeGenome False g'
     (s2', i2') = writeGenome False h'
+    (g_bal, h_bal) = reduceGenesForDeletion g h
+    part = getPartition ptype g_bal h_bal
     (g', h') = reduced part
-    part = getPartition ptype g h
     g = readGenome True signed s1 i1
     h = readGenome True signed s2 i2

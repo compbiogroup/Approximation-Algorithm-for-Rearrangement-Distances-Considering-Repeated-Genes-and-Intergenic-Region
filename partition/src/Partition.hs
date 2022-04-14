@@ -60,16 +60,18 @@ import Genomes as G
 import LocalBase
 
 -- | Representation of a partition
-data Partition = Partition {partType :: PartitionType, gseq :: Seq Genome, hseq :: Seq Genome, gbps :: Seq IR, hbps :: Seq IR} deriving (Show)
+newtype Partition = ValidPartition PartialPartition deriving newtype (Show)
+
+data PartialPartition = PPartition {partType :: PartitionType, gseq :: Seq Genome, hseq :: Seq Genome, gbps :: Seq IR, hbps :: Seq IR} deriving (Show)
 
 -- | A partial partition may be invalid
-makePartialPartition :: PartitionType -> Genome -> Genome -> Partition
-makePartialPartition ptype g h = Partition ptype (pure g) (pure h) mempty mempty
+makePartialPartition :: PartitionType -> Genome -> Genome -> PartialPartition
+makePartialPartition ptype g h = PPartition ptype (pure g) (pure h) mempty mempty
 
--- | Recives: a partition and an indication of the original genome and
+-- | Recives: a partial partition and an indication of the original genome and
 -- index of an occurrence of a duo containing the breakpoint
---   Returns: a partition with the new breakpoint
-addBreakpoint :: Partition -> GenomePosition -> Partition
+--   Returns: a partial partition with the new breakpoint
+addBreakpoint :: PartialPartition -> GenomePosition -> PartialPartition
 addBreakpoint part duoPos =
   case duoPos of
     (G idx _ _) ->
@@ -109,7 +111,7 @@ addBreakpoint part duoPos =
 
 -- | 2k-approximation for the intergenic partition problem
 getPartition :: PartitionType -> Genome -> Genome -> Partition
-getPartition ptype g h = getPartition_ (makePartialPartition ptype g h) update ptype g h
+getPartition ptype g h = ValidPartition $ getPartition_ (makePartialPartition ptype g h) update ptype g h
   where
     update part _ breaksPos = foldl addBreakpoint part (map snd breaksPos)
 
@@ -118,6 +120,9 @@ listGenomes = getPartition_ [] update
   where
     update l x _ = x : l
 
+-- | Produce a value of type `a` by selecting elements from a Tmin set.
+-- The update function must receive a value of type 'a', the selected genome
+-- and a list of breakpoints to be inserted in the partition.
 getPartition_ :: forall a. a -> (a -> Genome -> [(Maybe Genome, GenomePosition)] -> a) -> PartitionType -> Genome -> Genome -> a
 getPartition_ acc0 updateAcc ptype g h = go acc0 tmin0 breaks0
   where
@@ -130,10 +135,6 @@ getPartition_ acc0 updateAcc ptype g h = go acc0 tmin0 breaks0
         Just (x, gp) -> assert (tmin' /= tmin) $ go acc' tmin' breaks'
           where
             tmin' =
-              -- ( if genomeSize x == 1
-              --     then deleteGene gp x
-              --     else id
-              -- )
               case ptype of
                 MCISP -> tmin1
                 RMCISP -> tmin2
@@ -149,20 +150,20 @@ getPartition_ acc0 updateAcc ptype g h = go acc0 tmin0 breaks0
             acc' = updateAcc acc x breaksPos
 
 -- | A partition (s,p) is valid if
---  it is possible to rearrange s to obtain p
+--  it is possible to rearrange s to obtain p.
 validPartition :: Partition -> Bool
 validPartition = uncurry balanced . reduced
 
 breakpoints :: Partition -> (Seq IR, Seq IR)
-breakpoints part = (gbps part, hbps part)
+breakpoints (ValidPartition part) = (gbps part, hbps part)
 
 blocks :: Partition -> (Seq Genome, Seq Genome)
-blocks part = (gseq part, hseq part)
+blocks (ValidPartition part) = (gseq part, hseq part)
 
 -- | Converts a partition into a pair of genomes representing the reduced genomes
 -- correspondent to the partition
 reduced :: Partition -> (Genome, Genome)
-reduced part = (gr, hr)
+reduced (ValidPartition part) = (gr, hr)
   where
     gr = fromLists False sign gr_ls (toList $ gbps part)
     hr = fromLists False sign hr_ls (toList $ hbps part)
@@ -205,8 +206,7 @@ data Breaks = Breaks PartitionType (HashSet (Gene, Gene)) deriving (Show)
 isBreak :: Duo -> Breaks -> Bool
 isBreak duo (Breaks partType brks) = (genePair . canonicOri $ duo) `HashSet.member` brks
 
--- Position of the break that must be inserted, the Bool indicates whether the breakpoint
--- is after a character that must be deleted
+-- Position of the break that must be inserted, if the genome has size one two breaks are returned (breaks around the genome).
 getBreak :: Genome -> Genome -> GenomePosition -> Breaks -> Genome -> ([(Maybe Genome, GenomePosition)], Breaks)
 getBreak g h gp brks@(Breaks partType set) x =
   if genomeSize x == 1

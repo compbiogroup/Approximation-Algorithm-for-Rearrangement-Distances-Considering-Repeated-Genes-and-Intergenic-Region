@@ -38,11 +38,15 @@ module Genomes
     genePair,
     genomeSize,
     alphabet,
+    occurenceMap,
+    occurenceMapLookup,
+    occurenceMapAdjust,
     intToGene,
     interleaveListRepresentation,
     interleaveListToGenome,
     maybeEstimateITD,
     occurenceMax,
+    geneMaxValue,
     randomGenome,
     randomGenomeWithReplicas,
     rearrangeGenome,
@@ -78,8 +82,8 @@ import Data.Char (isNumber)
 import Data.Coerce (coerce)
 import Data.Foldable (foldl', toList)
 import Data.Hashable (Hashable)
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import qualified Data.List as List
 import Data.Maybe (fromJust)
 import Data.Text (Text)
@@ -460,6 +464,32 @@ insertion i x g =
     vsx = gstring x
     vix = irList x
 
+combineGenomes :: IR -> Genome -> Genome -> Genome
+combineGenomes ir g h = Genome (gstring g <> gstring h) (irList g <> Vec.cons ir (irList h)) (Vec.concat [interleaveListRepresentation g, Vec.singleton (irToBS ir), interleaveListRepresentation h]) (genomeIsSigned g <> genomeIsSigned h)
+
+combineGenomesL :: [IR] -> [Genome] -> Genome
+combineGenomesL irs gs = Genome vs vi ilr (genomeIsSigned $ head gs)
+      where
+          vs = Vec.concat (map gstring gs)
+          vi = Vec.concat $ interleavelists (map irList gs) (map pure irs)
+          ilr = Vec.fromList $ interleavelists ls_bs li_bs
+          ls_bs = fmap geneToBS . toList $ vs
+          li_bs = fmap irToBS . toList $ vi
+
+breakGenome :: Genome -> Idx -> (IR, Genome, Genome)
+breakGenome g idx = (irList g ! (coerce idx - 1), sliceGenome g 1 idx, sliceGenome g (idx + 1) (coerce $ genomeSize g))
+
+sliceGenome :: Genome -> Idx -> Idx -> Genome
+sliceGenome g i j = Genome vs' vi' ilr' (genomeIsSigned g)
+  where
+    ilr' = Vec.slice (coerce $ 2 * (i -1)) (coerce $ 2 * (j - i) + 1) $ interleaveListRepresentation g
+    vs' = Vec.slice (coerce $ i - 1) (coerce $ j - i + 1) $ gstring g
+    vi' = Vec.slice (coerce $ i - 1) (coerce $ j - i) $ irList g
+
+------------------------------------------
+--           Descriptions               --
+------------------------------------------
+
 irByIdx :: Genome -> Idx -> IR
 irByIdx g idx = irList g ! (coerce idx - 1)
 
@@ -473,42 +503,38 @@ duoByIdx g idx = Duo (a1, a2) ir idx (genomeSize g) (genomeIsSigned g)
     a2 = vs ! i
     ir = vi ! (i -1)
 
-combineGenomes :: IR -> Genome -> Genome -> Genome
-combineGenomes ir g h = Genome (gstring g <> gstring h) (irList g <> Vec.cons ir (irList h)) (Vec.concat [interleaveListRepresentation g, Vec.singleton (irToBS ir), interleaveListRepresentation h]) (genomeIsSigned g <> genomeIsSigned h)
-
-combineGenomesL :: [IR] -> [Genome] -> Genome
-combineGenomesL irs gs =
-  foldl' (\x (ir, y) -> combineGenomes ir x y) (head gs) (zip irs (tail gs))
-
-breakGenome :: Genome -> Idx -> (IR, Genome, Genome)
-breakGenome g idx = (irList g ! (coerce idx - 1), sliceGenome g 1 idx, sliceGenome g (idx + 1) (coerce $ genomeSize g))
-
-sliceGenome :: Genome -> Idx -> Idx -> Genome
-sliceGenome g i j = Genome vs' vi' ilr' (genomeIsSigned g)
-  where
-    ilr' = Vec.slice (coerce $ 2 * (i -1)) (coerce $ 2 * (j - i) + 1) $ interleaveListRepresentation g
-    vs' = Vec.slice (coerce $ i - 1) (coerce $ j - i + 1) $ gstring g
-    vi' = Vec.slice (coerce $ i - 1) (coerce $ j - i) $ irList g
-
 occurence :: Genome -> Gene -> Int
 occurence g a = sum . fmap (\x -> if x == a then 1 else 0) . gstring $ g
 
+occurenceMap :: Genome -> IntMap Int
+occurenceMap = IntMap.fromListWith (+) . (`zip` [1,1..]) . map abs . coerce . toList . gstring
+
+occurenceMapLookup :: Gene -> IntMap Int -> Maybe Int
+occurenceMapLookup a = IntMap.lookup (abs . coerce $ a)
+
+occurenceMapAdjust :: (Int -> Int) -> Gene -> IntMap Int -> IntMap Int
+occurenceMapAdjust f a = IntMap.adjust f (abs . coerce $ a)
+
 occurenceMax :: Genome -> Int
-occurenceMax g = maximum . fmap (g `occurence`) . gstring $ g
+occurenceMax = maximum . occurenceMap
 
 alphabet :: Genome -> [Gene]
 alphabet = unique . toList . gstring
 
 balanced :: Genome -> Genome -> Bool
-balanced g h = balancedGenes && balancedIR
-  where
-    balancedGenes =
-      (List.sort . map canonicOri . Vec.toList $ gstring g)
-        == (List.sort . map canonicOri . Vec.toList $ gstring h)
-    balancedIR = sum (irList g) == sum (irList h)
+balanced g h = balancedGenes g h && balancedIR g h
+    where
+        balancedGenes g h =
+          (List.sort . map canonicOri . Vec.toList $ gstring g)
+            == (List.sort . map canonicOri . Vec.toList $ gstring h)
+        balancedIR g h = sum (irList g) == sum (irList h)
 
 genomeSize :: Genome -> Size
 genomeSize = Size . Vec.length . gstring
+
+-- Maximum value of a gene
+geneMaxValue :: Genome -> Gene
+geneMaxValue = maximum . fmap (\v -> if v == maxBound then 0 else abs v) . gstring
 
 ------------------------------------------
 --           Sub-Genome                 --

@@ -1,5 +1,6 @@
 import GenomesCheck as GC
 import PartitionCheck as PC
+import BalancerCheck as BC
 
 main :: IO ()
 main = do
@@ -7,5 +8,6 @@ main = do
     [ return True
     , GC.tests
     , PC.tests
+    , BC.tests
     ]
   print ans
