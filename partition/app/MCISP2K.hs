@@ -18,6 +18,7 @@ import Genomes (Genome, Sign(..), readGenome, writeGenome)
 import LocalBase
 import Options.Applicative
 import Partition (getPartition, reduced, PartitionType(..))
+import Text.Printf (printf)
 
 data Args = Args
   { input :: String,
@@ -81,7 +82,7 @@ main = do
       let !bstrs' = force $ simplifyGenomes (partType args) (signed args) bstrs
       end <- getCurrentTime
       let time = BS.pack . show . realToFrac $ diffUTCTime end start
-      BS.writeFile (output args ++ "_" ++ show i) . BS.unlines $ fromAns (bstrs', "# Time: " <> (BS.pack . show $ time))
+      BS.writeFile (output args ++ "_" ++ printf "%04d" i) . BS.unlines $ fromAns (bstrs', "# Time: " <> (BS.pack . show $ time))
 
     toQuadruples (s1 : i1 : s2 : i2 : ss) = (s1, i1, s2, i2) : toQuadruples ss
     toQuadruples [] = []
