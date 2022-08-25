@@ -14,10 +14,10 @@ import Control.Concurrent.ParallelIO.Global (parallel_, stopGlobalPool)
 import Control.DeepSeq (force)
 import qualified Data.ByteString.Char8 as BS
 import Data.Time (diffUTCTime, getCurrentTime)
-import Genomes (Genome, Sign(..), readGenome, writeGenome)
+import Genomes (Genome, Sign(..), readGenome, writeGenome, zeroIR)
 import LocalBase
 import Options.Applicative
-import Partition (getPartition, reduced, PartitionType(..))
+import Partition (getPartition, reduced, mapToPerm, PartitionType(..))
 import Text.Printf (printf)
 
 data Args = Args
@@ -25,7 +25,8 @@ data Args = Args
     output :: String,
     noParallel :: Bool,
     signed :: Sign,
-    partType :: PartitionType
+    partType :: PartitionType,
+    asPerm :: Bool
   }
 
 argsParser :: Parser Args
@@ -56,6 +57,10 @@ argsParser =
         ( long "rev"
             <> help "Whether to use reverse partition."
         )
+      <*> switch
+        ( long "perm"
+            <> help "Whether to produce permutations from a mapping of the original strings instead of reduced genomes."
+        )
 
 opts :: ParserInfo Args
 opts =
@@ -79,7 +84,7 @@ main = do
   where
     runOne args (i, bstrs) = do
       start <- getCurrentTime
-      let !bstrs' = force $ simplifyGenomes (partType args) (signed args) bstrs
+      let !bstrs' = force $ simplifyGenomes (asPerm args) (partType args) (signed args) bstrs
       end <- getCurrentTime
       let time = BS.pack . show . realToFrac $ diffUTCTime end start
       BS.writeFile (output args ++ "_" ++ printf "%04d" i) . BS.unlines $ fromAns (bstrs', "# Time: " <> (BS.pack . show $ time))
@@ -90,13 +95,16 @@ main = do
 
     fromAns ((s1, i1, s2, i2), time)  = s1 : i1 : s2 : i2 : [time]
 
-simplifyGenomes :: PartitionType -> Sign -> (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString) -> (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString)
-simplifyGenomes ptype signed (s1, i1, s2, i2) = (s1', i1', s2', i2')
+simplifyGenomes :: Bool -> PartitionType -> Sign -> (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString) -> (BS.ByteString, BS.ByteString, BS.ByteString, BS.ByteString)
+simplifyGenomes asPerm ptype signed (s1, i1, s2, i2) = (s1', i1', s2', i2')
   where
     (s1', i1') = writeGenome False g'
     (s2', i2') = writeGenome False h'
     (g_bal, h_bal) = reduceGenesForDeletion g h
+    -- g_bal_z = zeroIR g_bal
+    -- h_bal_z = zeroIR h_bal
+    -- part = getPartition ptype g_bal_z h_bal_z
     part = getPartition ptype g_bal h_bal
-    (g', h') = reduced part
+    (g', h') = if asPerm then mapToPerm g_bal h_bal part else reduced part
     g = readGenome True signed s1 i1
     h = readGenome True signed s2 i2

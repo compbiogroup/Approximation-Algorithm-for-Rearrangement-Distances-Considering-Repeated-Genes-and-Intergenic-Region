@@ -25,6 +25,7 @@ module Partition
     validPartition,
     breakpoints,
     blocks,
+    mapToPerm,
     reduced,
     cost,
     -- Partition.weigth,
@@ -159,6 +160,45 @@ breakpoints (ValidPartition part) = (gbps part, hbps part)
 
 blocks :: Partition -> (Seq Genome, Seq Genome)
 blocks (ValidPartition part) = (gseq part, hseq part)
+
+-- | Converts a partition into a pair of genomes representing a mapping into
+-- a permutation compatible with the reduced genomes correspondent to the partition
+mapToPerm :: Genome -> Genome -> Partition -> (Genome, Genome)
+mapToPerm g_bal h_bal (ValidPartition part) = (gr, hr)
+  where
+    (_,_,g_bal_ir) = toLists False g_bal
+    (_,_,h_bal_ir) = toLists False h_bal
+    gr = fromLists False sign gr_ls g_bal_ir
+    hr = fromLists False sign hr_ls h_bal_ir
+    (gr_ls, hr_ls) = (genomesToUniqueList ggs, genomesToUniqueList hhs)
+    ggs = gseq part
+    hhs = hseq part
+    (sign, gmEmptyX) = case partType part of
+      MCISP -> (Unsigned, gmEmpty)
+      RMCISP -> (Signed, gmEmptyRev)
+
+    -- Produce list of unique characters correspondent to genes
+    genomesToUniqueList :: Seq Genome -> [Gene]
+    genomesToUniqueList = genomesToUniqueList' [] m_orig . toList
+    genomesToUniqueList' :: [Gene] -> GenomeMap GeneListForMap -> [Genome] -> [Gene]
+    genomesToUniqueList' acc m [] = reverse acc
+    genomesToUniqueList' acc m (g:gs) = genomesToUniqueList' ([v..v + n - 1] ++ acc) m' gs
+        where 
+            (_,lg,_) = toLists False g
+            n = intToGene . coerce . genomeSize $ g
+            v = head . unGeneListForMap . fromMaybe (error "Error on mapToPerm (1).") $ gmLookup g m
+            m' = gmAlter g (\old -> case old of
+                                      Nothing -> error "Error on mapToPerm (2)."
+                                      Just (MkGeneListForMap (x:xs)) -> MkGeneListForMap xs) m
+    m_orig = fst $ foldl addGenome (gmEmptyX, 1 :: Gene) (hhs Seq.>< ggs)
+    addGenome :: (GenomeMap GeneListForMap, Gene) -> Genome -> (GenomeMap GeneListForMap, Gene)
+    addGenome (m, count) g = (m', count')
+      where
+        n = intToGene . coerce . genomeSize $ g
+        count' = count + n
+        m' = gmAlter g (\old -> case old of
+                                  Nothing -> MkGeneListForMap [count]
+                                  Just (MkGeneListForMap l) -> MkGeneListForMap (count:l)) m
 
 -- | Converts a partition into a pair of genomes representing the reduced genomes
 -- correspondent to the partition

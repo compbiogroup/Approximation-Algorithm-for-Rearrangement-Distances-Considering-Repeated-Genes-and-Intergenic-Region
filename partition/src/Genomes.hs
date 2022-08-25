@@ -6,6 +6,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
 -- Module      : Genomes
@@ -34,6 +35,7 @@ module Genomes
     duoIr,
     duoToBS,
     estimateITD,
+    zeroIR,
     fromLists,
     genePair,
     genomeSize,
@@ -65,9 +67,11 @@ module Genomes
     -- weigth,
     subGenomeFind,
     GenomeMap,
+    GeneListForMap(..),
     gmEmpty,
     gmEmptyRev,
     gmLookup,
+    gmAlter,
     gmInsert,
     gmLookupInsert,
   )
@@ -100,7 +104,7 @@ newtype IR = IR Int deriving newtype (Eq, Show, Read, Num, Ord, Random)
 
 newtype Idx = Idx Int deriving newtype (Eq, Show, Read, Num, Ord, Enum, Random, Integral, Real)
 
-newtype Gene = Gene Int deriving newtype (Eq, Show, Read, Hashable, Ord, Num, Random, Bounded)
+newtype Gene = Gene Int deriving newtype (Eq, Show, Read, Hashable, Ord, Num, Random, Bounded, Enum)
 
 type Gstring = Vector Gene
 
@@ -339,6 +343,16 @@ validEndIR bs = BS.head bs == BS.head "g"
 ------------------------------------------
 --           Operations                 --
 ------------------------------------------
+
+-- | Replace intergenic regions with zeros
+zeroIR :: Genome -> Genome
+zeroIR g = Genome vs vi ilr (genomeIsSigned g)
+  where
+    vs = gstring g
+    vi = fmap (const 0) $ irList g
+    ilr = Vec.fromList $ interleavelists ls_bs li_bs
+    ls_bs = fmap geneToBS . toList $ vs
+    li_bs = fmap irToBS . toList $ vi
 
 transposition :: Idx -> Idx -> Idx -> IR -> IR -> IR -> Genome -> Genome
 transposition i j k x y z g =
@@ -601,6 +615,12 @@ data GenomeMap v = GM MapType (IntMap [(Genome, v)])
 instance Show v => Show (GenomeMap v) where
   show (GM _ m) = show . concat . IntMap.elems $ m
 
+newtype GeneListForMap = MkGeneListForMap {unGeneListForMap :: [Gene]} deriving newtype (Eq, Show)
+
+instance Orientable GeneListForMap where
+  getOri = getOri . head . unGeneListForMap
+  invOri = MkGeneListForMap . map invOri . unGeneListForMap
+
 gmEmpty :: GenomeMap v
 gmEmpty = GM Direct IntMap.empty
 
@@ -617,6 +637,21 @@ gmLookup g m@(GM Reverse _) =
     RL -> invOri <$> gmLookup_ g' k m
   where
     g' = canonicOri g
+    k = coerce . Vec.head . gstring $ g'
+
+gmAlter :: forall v. Genome -> (Maybe v -> v) -> GenomeMap v -> GenomeMap v
+gmAlter g f (GM mtype m) = GM mtype (IntMap.alter f' k m)
+  where
+    f' :: Maybe [(Genome,v)] -> Maybe [(Genome,v)]
+    f' Nothing = Just [(g', f Nothing)]
+    f' (Just ls) = f'' [] ls
+    f'' :: [(Genome, v)] -> [(Genome, v)] -> Maybe [(Genome, v)]
+    f'' acc [] = Just $ reverse acc ++ [(g', f Nothing)]
+    f'' acc ((g',val):ls) =
+        if g' == g
+           then Just $ reverse acc ++ (g', f (Just val)) : ls
+           else f'' ((g',val):acc) ls
+    g' = case mtype of Direct -> g; Reverse -> canonicOri g
     k = coerce . Vec.head . gstring $ g'
 
 gmLookup_ :: Genome -> Int -> GenomeMap v -> Maybe v
