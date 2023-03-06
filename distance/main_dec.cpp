@@ -28,6 +28,7 @@ struct Args {
 void help(char *name) {
   cout << "usage: Find a cicle decomposition for the breakpoint graph formed "
           "be the origin and target signed genome."
+       << endl
        << "\t" << name << " HEUR [OPTIONS]" << endl
        << endl
        << "positional arguments:" << endl
@@ -44,7 +45,7 @@ void help(char *name) {
        << "\t-o, --output OUTPUT     outpute folder (if not provided stdout is "
           "used)"
        << endl
-       << "\t-k, --iterations ITER   number of iterations (defaut 1)" << endl
+       << "\t-k, --iterations ITER   number of iterations (default 1)" << endl
        << endl
        << "\t-e, --extend            whether to extend the genomes before "
           "apply the algorithm"
