@@ -1,5 +1,5 @@
 #include "distance_algorithms/reversal4.hpp"
-#include "distance_algorithms/transposition4.hpp"
+#include "distance_algorithms/transposition3.hpp"
 #include "distance_algorithms/reversal_transposition45.hpp"
 #include "external/external.hpp"
 #include "misc/genome.hpp"
@@ -31,8 +31,8 @@ void help(char *name) {
        << "\t" << name << " ALG [OPTIONS]" << endl
        << endl
        << "positional arguments:" << endl
-       << "\tALG                     the algorithm to use (transposition4, "
-          "reversal4, or "
+       << "\tALG                     the algorithm to use (transposition3, "
+          "reversal4, reversal_transposition45, or "
           "the name of an executable in the external folder)"
        << endl
        << endl
@@ -47,7 +47,7 @@ void help(char *name) {
        << "\t-o, --output OUTPUT     outpute folder (if not provided stdout is "
           "used)"
        << endl
-       << "\t-k, --iterations ITER   number of iterations (defaut 1)" << endl
+       << "\t-k, --iterations ITER   number of iterations (default 1)" << endl
        << endl
        << "\t-e, --extend            whether to extend the genomes before "
           "apply the algorithm"
@@ -114,8 +114,8 @@ int main(int argc, char *argv[]) {
   srand(1);
 
   // set algorithm
-  if (args.alg == "transposition4") {
-    alg.reset(new Transposition4());
+  if (args.alg == "transposition3") {
+    alg.reset(new Transposition3());
   } else if (args.alg == "reversal4") {
     alg.reset(new Reversal4());
   } else if (args.alg == "reversal_transposition45") {

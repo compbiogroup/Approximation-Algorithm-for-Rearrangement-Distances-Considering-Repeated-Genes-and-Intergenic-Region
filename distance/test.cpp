@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <vector>
 
-#include "distance_algorithms/transposition4.hpp"
+#include "distance_algorithms/transposition3.hpp"
 #include "distance_algorithms/reversal4.hpp"
 #include "distance_algorithms/reversal_transposition45.hpp"
 #include "cycle/cycles.hpp"
@@ -120,9 +120,9 @@ void generate(size_t n, TestCycleGraph &t_cg) {
   t_cg.cg = unique_ptr<CycleGraph>(new CycleGraph(*gs.g, *gs.h));
 }
 
-class PBounds4T : public Property<TestPerm> {
+class PBounds3T : public Property<TestPerm> {
   bool holdsFor(const TestPerm &t_perm) {
-    Transposition4 alg;
+    Transposition3 alg;
 
     int breaks_count = 0;
     for (size_t b = 1; b <= t_perm.perm->size() - 1; b++) {
@@ -234,7 +234,7 @@ int main() {
   cout << "seed: " << seed << endl;
   srand(seed);
 
-  check<PBounds4T>(
+  check<PBounds3T>(
       "upper and lower bounds hold for factor 4 algorithm for transposition");
   check<PBounds4R>(
       "upper and lower bounds hold for factor 4 algorithm for reversal");

@@ -5,7 +5,7 @@
 
 void transposition_move(Permutation &, Gene, Gene, Gene, IR, IR, IR);
 
-class Transposition4 : public DistAlg {
+class Transposition3 : public DistAlg {
 public:
   int estimate_distance(Permutation pi) override;
 };

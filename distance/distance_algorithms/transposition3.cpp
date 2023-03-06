@@ -1,11 +1,11 @@
-#include "transposition4.hpp"
+#include "transposition3.hpp"
 #include "../misc/permutation.hpp"
 #include "aux.hpp"
 #include <algorithm>
 #include <cassert>
 #include <set>
 
-int Transposition4::estimate_distance(Permutation pi) {
+int Transposition3::estimate_distance(Permutation pi) {
   int i, j, k, dist = 0;
   set<IR> breaks;
   bool single_excess =
